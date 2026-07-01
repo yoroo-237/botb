@@ -1,0 +1,15 @@
+import { Router } from 'express';
+import { requireAuth } from '../middlewares/auth.js';
+import { walletController } from '../controllers/wallet.controller.js';
+
+const r = Router();
+
+r.use(requireAuth);
+r.get('/',             walletController.getWallet);
+r.get('/balance',      walletController.getBalance);
+r.get('/deposits',     walletController.getDeposits);
+r.get('/deposits/:id', walletController.getDeposit);
+r.post('/deposit',     walletController.createDeposit);
+r.get('/transactions', walletController.getTransactions);
+
+export default r;

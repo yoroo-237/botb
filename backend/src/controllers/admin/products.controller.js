@@ -1,0 +1,86 @@
+import { prisma } from '../../db.js';
+import { ok } from '../../utils/response.js';
+import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
+import { appError } from '../../utils/formatters.js';
+
+export const adminProductsController = {
+  async list(req, res) {
+    const { page, limit, skip } = parsePaginationParams(req.query);
+    const { search, category, isActive } = req.query;
+
+    const where = {};
+    if (search)               where.name     = { contains: search.trim(), mode: 'insensitive' };
+    if (category)             where.category = { slug: category };
+    if (isActive !== undefined) where.isActive = isActive === 'true';
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where, skip, take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { images: { take: 1, orderBy: { position: 'asc' } }, category: true, brand: true },
+      }),
+      prisma.product.count({ where }),
+    ]);
+    res.json(ok({ products, pagination: buildPagination(page, limit, total) }));
+  },
+
+  async create(req, res) {
+    const { name, slug, price, description, stock, categoryId, brandId, images = [] } = req.body;
+    if (!name?.trim()) throw appError('name requis', 400);
+    if (!slug?.trim()) throw appError('slug requis', 400);
+    if (!price)        throw appError('price requis', 400);
+
+    const product = await prisma.product.create({
+      data: {
+        name:        name.trim(),
+        slug:        slug.trim().toLowerCase(),
+        price:       parseFloat(price),
+        description: description?.trim() || null,
+        stock:       parseInt(stock || 0, 10),
+        categoryId:  categoryId ? parseInt(categoryId, 10) : null,
+        brandId:     brandId    ? parseInt(brandId, 10)    : null,
+        images:      images.length ? { create: images.map((img, i) => ({ url: img.url, thumbnail: img.thumbnail || null, position: i })) } : undefined,
+      },
+      include: { images: true, category: true },
+    });
+    res.status(201).json(ok(product));
+  },
+
+  async update(req, res) {
+    const id   = parseInt(req.params.id, 10);
+    const { name, slug, price, description, stock, isActive, categoryId, brandId } = req.body;
+    const data = {};
+    if (name        !== undefined) data.name        = name.trim();
+    if (slug        !== undefined) data.slug        = slug.trim().toLowerCase();
+    if (price       !== undefined) data.price       = parseFloat(price);
+    if (description !== undefined) data.description = description?.trim() || null;
+    if (stock       !== undefined) data.stock       = parseInt(stock, 10);
+    if (isActive    !== undefined) data.isActive    = Boolean(isActive);
+    if (categoryId  !== undefined) data.categoryId  = categoryId ? parseInt(categoryId, 10) : null;
+    if (brandId     !== undefined) data.brandId     = brandId    ? parseInt(brandId, 10)    : null;
+
+    const product = await prisma.product.update({ where: { id }, data, include: { images: true, category: true } });
+    res.json(ok(product));
+  },
+
+  async remove(req, res) {
+    const id = parseInt(req.params.id, 10);
+    await prisma.product.update({ where: { id }, data: { isActive: false } });
+    res.json(ok({ message: 'Produit désactivé' }));
+  },
+
+  // ─── Images ─────────────────────────────────────────────────────────────────
+
+  async addImage(req, res) {
+    const productId = parseInt(req.params.id, 10);
+    const { url, thumbnail, position = 0 } = req.body;
+    if (!url) throw appError('url requise', 400);
+    const img = await prisma.productImage.create({ data: { productId, url, thumbnail: thumbnail || null, position: parseInt(position, 10) } });
+    res.status(201).json(ok(img));
+  },
+
+  async removeImage(req, res) {
+    await prisma.productImage.delete({ where: { id: parseInt(req.params.imgId, 10) } });
+    res.json(ok({ deleted: true }));
+  },
+};

@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS ────────────────────────────────────────────────────────────────────
+
+model User {
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  passwordHash     String
+  role             String    @default("customer")  // customer | moderator | admin
+  isActive         Boolean   @default(true)
+  balance          Decimal   @default(0) @db.Decimal(12, 2)
+  points           Int       @default(0)
+  totalSpent       Decimal   @default(0) @db.Decimal(12, 2)
+  markupPct        Decimal   @default(0) @db.Decimal(5, 2)
+  bio              String?
+  telegramHandle   String?
+  signalDetails    String?
+  sessionDetails   String?
+  btcRefundAddress String?
+  xmrRefundAddress String?
+  avatarUrl        String?
+  hidePrices       Boolean   @default(false)
+  notifOrders      Boolean   @default(true)
+  notifDeposits    Boolean   @default(true)
+  notifTickets     Boolean   @default(true)
+  notifNewProducts Boolean   @default(true)
+  notifLogins      Boolean   @default(true)
+  tourCompleted    Boolean   @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  orders         Order[]
+  transactions   Transaction[]
+  deposits       Deposit[]
+  tickets        SupportTicket[]
+  ticketMessages TicketMessage[]
+  apiKeys        ApiKey[]
+  notifications  Notification[]
+  reviews        Review[]
+}
+
+// ─── PRODUCTS & CATALOGUE ─────────────────────────────────────────────────────
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String
+  slug      String     @unique
+  parentId  Int?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+  createdAt DateTime   @default(now())
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  slug      String    @unique
+  logoUrl   String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model Product {
+  id          Int            @id @default(autoincrement())
+  name        String
+  slug        String         @unique
+  description String?
+  price       Decimal        @db.Decimal(10, 2)
+  stock       Int            @default(0)
+  isActive    Boolean        @default(true)
+  categoryId  Int?
+  category    Category?      @relation(fields: [categoryId], references: [id])
+  brandId     Int?
+  brand       Brand?         @relation(fields: [brandId], references: [id])
+  images      ProductImage[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  thumbnail String?
+  position  Int     @default(0)
+}
+
+// ─── ORDERS ───────────────────────────────────────────────────────────────────
+
+model Order {
+  id              Int         @id @default(autoincrement())
+  orderNumber     String      @unique
+  userId          Int
+  user            User        @relation(fields: [userId], references: [id])
+  status          String      @default("processing")  // processing | shipped | delivered | cancelled | refunded
+  paymentMethod   String
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  shippingFee     Decimal     @default(0) @db.Decimal(10, 2)
+  shippingAddress String
+  name            String
+  email           String?
+  trackingNumber  String?
+  carrier         String?
+  note            String?
+  placedAt        DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+  transaction     Transaction?
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  quantity  Int
+}
+
+// ─── WALLET ───────────────────────────────────────────────────────────────────
+
+model Deposit {
+  id              Int          @id @default(autoincrement())
+  userId          Int
+  user            User         @relation(fields: [userId], references: [id])
+  currency        String       // BTC | LTC | DOGE | ETH | XMR
+  address         String       @default("pending")
+  status          String       @default("awaiting")  // awaiting | partial | confirmed | expired
+  amountExpected  Decimal?     @db.Decimal(18, 8)
+  amountReceived  Decimal      @default(0) @db.Decimal(18, 8)
+  usdCredited     Decimal      @default(0) @db.Decimal(10, 2)
+  expiresAt       DateTime
+  confirmedAt     DateTime?
+  hookId          String?
+  ethIndex        Int?
+  transactionId   Int?         @unique
+  transaction     Transaction? @relation(fields: [transactionId], references: [id])
+  createdAt       DateTime     @default(now())
+}
+
+model Transaction {
+  id         Int      @id @default(autoincrement())
+  frontendId String   @unique
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  type       String   // deposit | purchase | refund | adjustment | bonus
+  amount     Decimal  @db.Decimal(10, 2)
+  currency   String   @default("USD")
+  status     String   @default("confirmed")  // pending | confirmed | failed
+  note       String?
+  txHash     String?
+  orderId    Int?     @unique
+  order      Order?   @relation(fields: [orderId], references: [id])
+  deposit    Deposit?
+  createdAt  DateTime @default(now())
+}
+
+// ─── SUPPORT ──────────────────────────────────────────────────────────────────
+
+model SupportTicket {
+  id         Int             @id @default(autoincrement())
+  frontendId String          @unique
+  userId     Int
+  user       User            @relation(fields: [userId], references: [id])
+  subject    String
+  category   String          @default("other")  // deposit | order | account | other
+  priority   String          @default("normal") // low | normal | high | urgent
+  status     String          @default("open")   // open | in_progress | resolved | closed
+  assignedTo String?
+  messages   TicketMessage[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}
+
+model TicketMessage {
+  id        Int           @id @default(autoincrement())
+  ticketId  Int
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User          @relation(fields: [userId], references: [id])
+  isAdmin   Boolean       @default(false)
+  message   String
+  createdAt DateTime      @default(now())
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // welcome | order | deposit | ticket | system
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+// ─── CONTENT ──────────────────────────────────────────────────────────────────
+
+model NewsArticle {
+  id          Int       @id @default(autoincrement())
+  title       String
+  slug        String    @unique
+  content     String
+  imageUrl    String?
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model FAQ {
+  id        Int      @id @default(autoincrement())
+  question  String
+  answer    String
+  category  String?
+  position  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Giveaway {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String
+  prize       String
+  imageUrl    String?
+  status      String    @default("draft")  // draft | active | ended
+  endsAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  rating     Int
+  comment    String?
+  isApproved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+// ─── API KEYS ─────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  keyPrefix String
+  keyHash   String
+  label     String?
+  isActive  Boolean   @default(true)
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+model SiteSetting {
+  key   String @id
+  value String
+}
