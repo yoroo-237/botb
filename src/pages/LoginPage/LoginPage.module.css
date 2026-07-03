@@ -1,0 +1,191 @@
+/* Age Gate */
+.ageOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.ageModal {
+  background: #1a1a2e;
+  border: 1px solid #503aa8;
+  border-radius: 12px;
+  padding: 48px 40px;
+  max-width: 480px;
+  width: 90%;
+  text-align: center;
+  color: #fff;
+}
+.ageLogo {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #503aa8;
+  margin-bottom: 16px;
+  letter-spacing: 2px;
+}
+.ageTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #fff;
+}
+.ageMsg {
+  color: #aaa;
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+.ageBtns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.ageBtnPrimary {
+  background: #503aa8;
+  color: #fff;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.ageBtnPrimary:hover { background: #6248c9; }
+.ageBtnSecondary {
+  background: transparent;
+  color: #aaa;
+  border: 1px solid #444;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.ageBtnSecondary:hover { border-color: #888; color: #ddd; }
+
+/* Page */
+.page {
+  min-height: 100vh;
+  background: #0d0d1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.card {
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 16px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.logo {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #503aa8;
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+}
+.subtitle {
+  text-align: center;
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 32px;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #2a2a4a;
+  margin-bottom: 28px;
+}
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.95rem;
+  padding: 10px;
+  cursor: pointer;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+.tab.active {
+  color: #503aa8;
+  border-bottom-color: #503aa8;
+}
+.form { display: flex; flex-direction: column; gap: 16px; }
+.fieldGroup { display: flex; flex-direction: column; gap: 6px; }
+.label { color: #ccc; font-size: 0.875rem; font-weight: 500; }
+.inputWrap { position: relative; }
+.input {
+  width: 100%;
+  background: #0d0d1a;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.95rem;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.input:focus { border-color: #503aa8; }
+.input.hasToggle { padding-right: 44px; }
+.eyeBtn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+.eyeBtn:hover { color: #ccc; }
+.submitBtn {
+  background: #503aa8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 13px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background 0.2s;
+}
+.submitBtn:hover:not(:disabled) { background: #6248c9; }
+.submitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.error {
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid rgba(220, 53, 69, 0.4);
+  color: #ff6b7a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.875rem;
+}
+.fieldError {
+  color: #ff6b7a;
+  font-size: 0.8rem;
+}
+.switch {
+  text-align: center;
+  color: #888;
+  font-size: 0.875rem;
+  margin-top: 8px;
+}
+.switchLink {
+  color: #503aa8;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.switchLink:hover { color: #7c5ed4; }

@@ -116,9 +116,94 @@
   text-align: center;
   padding: var(--spacing-80) var(--spacing-50);
 }
+.successIcon {
+  width: 72px;
+  height: 72px;
+  background: #28a745;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  margin: 0 auto var(--spacing-30);
+}
 .successTitle { margin-bottom: var(--spacing-30); }
 .successMsg {
   font-size: var(--font-size-medium);
   color: var(--color-accent-4);
   margin-bottom: var(--spacing-50);
+}
+
+/* Balance warning */
+.balanceWarning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-left: 4px solid #dc3545;
+  color: #721c24;
+  padding: 14px 18px;
+  border-radius: 4px;
+  margin-bottom: var(--spacing-40);
+  font-size: var(--font-size-small);
+}
+.walletLink {
+  color: #503aa8;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Payment methods */
+.paymentMethods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: var(--spacing-30);
+}
+.paymentOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid var(--color-accent-6);
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.paymentOption:hover { border-color: var(--color-accent-4); }
+.paymentSelected { border-color: #503aa8 !important; background: rgba(80, 58, 168, 0.05); }
+.radioHidden { position: absolute; opacity: 0; pointer-events: none; }
+.cryptoBadge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.paymentLabel { font-weight: 600; font-size: var(--font-size-small); }
+
+/* Wallet balance display */
+.walletBalance {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-20) 0;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  border-top: 1px solid var(--color-accent-6);
+  margin-bottom: var(--spacing-20);
+}
+
+/* Submit error */
+.submitError {
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.4);
+  color: #dc3545;
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: var(--font-size-small);
+  margin-bottom: var(--spacing-20);
 }
