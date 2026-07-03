@@ -54,12 +54,22 @@ function MoonIcon() {
   )
 }
 
+function UserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+    </svg>
+  )
+}
+
 export default function Header() {
   const { itemCount } = useCart()
-  const { theme, toggleTheme } = useApp()
+  const { theme, toggleTheme, user, balance, logout } = useApp()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [cartOpen, setCartOpen] = useState(false)
   const [openSubmenu, setOpenSubmenu] = useState(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navigate = useNavigate()
   const searchRef = useRef()
 
@@ -139,6 +149,32 @@ export default function Header() {
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
 
+          {/* User account */}
+          {user ? (
+            <div
+              className={styles.userMenu}
+              onMouseEnter={() => setUserMenuOpen(true)}
+              onMouseLeave={() => setUserMenuOpen(false)}
+            >
+              <button className={styles.userButton} aria-label="Mon compte">
+                <UserIcon />
+                <span className={styles.username}>{user.username}</span>
+              </button>
+              <ul className={styles.userDropdown + (userMenuOpen ? ' ' + styles.submenuOpen : '')}>
+                <li><Link to="/profile" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Mon Profil</Link></li>
+                <li><Link to="/wallet" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Wallet · ${balance.toFixed(2)}</Link></li>
+                {user.role === 'admin' && (
+                  <li><Link to="/duc-dashboard" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Admin</Link></li>
+                )}
+                <li>
+                  <button className={styles.logoutBtn} onClick={logout}>Déconnexion</button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <Link to="/login" className={styles.loginBtn}>Sign In</Link>
+          )}
+
           {/* Cart button */}
           <button
             onClick={() => setCartOpen(true)}
@@ -198,6 +234,20 @@ export default function Header() {
                     )}
                   </li>
                 ))}
+                <li className={styles.mobileNavItem + ' ' + styles.mobileDivider}>
+                  {user ? (
+                    <>
+                      <Link to="/profile" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Mon Profil</Link>
+                      <Link to="/wallet" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Wallet · ${balance.toFixed(2)}</Link>
+                      {user.role === 'admin' && (
+                        <Link to="/duc-dashboard" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Admin</Link>
+                      )}
+                      <button className={styles.mobileLogoutBtn} onClick={() => { setMobileOpen(false); logout() }}>Déconnexion</button>
+                    </>
+                  ) : (
+                    <Link to="/login" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Sign In</Link>
+                  )}
+                </li>
               </ul>
             </div>
           </div>

@@ -118,7 +118,7 @@ export default function App() {
             } />
 
             {/* Admin */}
-            <Route path="/mario-dashboard" element={<AdminGuard />}>
+            <Route path="/duc-dashboard" element={<AdminGuard />}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="users/:id" element={<AdminUserDetail />} />

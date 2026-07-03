@@ -107,6 +107,85 @@
 }
 .searchInput:focus { border-color: var(--color-contrast); }
 
+/* User menu (desktop) */
+.userMenu {
+  position: relative;
+  flex-shrink: 0;
+}
+.userButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--color-accent-6);
+  border-radius: 8px;
+  color: var(--color-contrast);
+  cursor: pointer;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  transition: background 0.18s, border-color 0.18s;
+}
+.userButton:hover {
+  background: var(--color-accent-5);
+  border-color: var(--color-accent-3);
+}
+.username {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.userDropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--color-base);
+  border: 1px solid var(--color-accent-6);
+  min-width: 170px;
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  z-index: 200;
+}
+.userDropdown.submenuOpen { display: block; }
+.logoutBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 7px 18px;
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  color: var(--color-contrast);
+  cursor: pointer;
+}
+.logoutBtn:hover { background: var(--color-accent-5); }
+
+/* Sign In link */
+.loginBtn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-accent-6);
+  border-radius: 8px;
+  color: var(--color-contrast);
+  cursor: pointer;
+  padding: 6px 14px;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.18s, border-color 0.18s;
+}
+.loginBtn:hover {
+  background: var(--color-accent-5);
+  border-color: var(--color-accent-3);
+  text-decoration: none;
+}
+
 /* Cart button */
 .cartButton {
   position: relative;
@@ -212,6 +291,26 @@
   padding: 4px 0;
 }
 .mobileSubmenuLink:hover { text-decoration: underline; }
+.mobileDivider {
+  border-top: 1px solid var(--color-accent-6);
+  padding-top: var(--spacing-30);
+  margin-top: var(--spacing-30);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mobileLogoutBtn {
+  display: block;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: var(--font-size-medium);
+  color: var(--color-contrast);
+  text-align: left;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.mobileLogoutBtn:hover { text-decoration: underline; }
 
 @media (max-width: 768px) {
   .nav, .searchForm { display: none; }

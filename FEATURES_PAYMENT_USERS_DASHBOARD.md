@@ -1174,3 +1174,1394 @@ Classes principales :
 .admin-info-list, .admin-info-row, .admin-info-label, .admin-info-value
 .admin-skel (animation skeleton)
 ```
+
+---
+
+## User Stories — Flux Complets
+
+### US-1 : Recharger son solde (Dépôt crypto)
+
+```
+En tant qu'utilisateur connecté,
+je veux déposer des cryptos pour obtenir du solde USD,
+afin de pouvoir passer des commandes.
+
+Flux :
+1. Accéder à /wallet → onglet "Credit Deposits"
+2. Cliquer "Add Funds" → Modal Step 1 s'ouvre
+3. Choisir la crypto (BTC / LTC / DOGE / ETH / XMR)
+4. Cocher la case de consentement aux CGU
+5. Cliquer "Generate Address" → POST /api/wallet/deposit
+6. Modal Step 2 : QR code + adresse + timer (12h par défaut)
+7. Envoyer les cryptos depuis son wallet externe
+8. Webhook reçu → USD crédité automatiquement (BTC/LTC/DOGE/ETH)
+   OU ouvrir un ticket support avec TX Hash (XMR)
+
+Résultat : balance += usdCredited, transaction type=deposit créée
+```
+
+### US-2 : Passer une commande (Checkout)
+
+```
+En tant qu'utilisateur avec un solde suffisant,
+je veux acheter des produits en débitant mon solde interne,
+afin de recevoir ma commande.
+
+Préconditions : balance >= total du panier
+
+Flux :
+1. Ajouter produits au panier
+2. Aller sur /checkout
+3. Remplir "Delivery Information" (name, email, address, city, postal, country)
+4. Choisir "Payment Method" (XMR/BTC/DOGE/LTC — informatif uniquement)
+5. Vérification solde : si balance < total → erreur rouge + lien /wallet
+6. Cliquer "Place Order" → POST /api/orders
+7. Backend : débite balance, crée Order + OrderItems + Transaction(purchase)
+8. Écran de confirmation avec order.id
+9. Panier vidé, balance mise à jour
+
+Résultat : balance -= total, order.status = "processing"
+```
+
+### US-3 : Ouvrir un ticket support
+
+```
+En tant qu'utilisateur (connecté ou non),
+je veux soumettre un problème à l'équipe support,
+afin d'obtenir de l'aide.
+
+Via SupportPage (/support) :
+1. Cliquer "Get Support"
+2. Choisir catégorie (General / Order Issue / Payment / etc.)
+3. Saisir Subject (requis) + Message (min 10 chars)
+4. Cliquer "Submit Ticket" → POST /api/support/tickets
+5. Ticket créé, visible dans la liste avec status = "open"
+
+Via SupportWidget (FAB sur toutes les pages) :
+1. Cliquer le bouton flottant vert
+2. Choisir "Ask Support" ou "Community Chat"
+3. Ask Support : sélectionner une situation parmi 9 choix
+4. Préciser si lié à "Order", "Deposit" ou "Not related"
+5. Saisir le premier message dans le chat drawer
+6. Premier envoi → POST /api/support/tickets automatiquement
+7. Réponse automatique : "a support agent will reply shortly"
+
+Résultat : SupportTicket créé + SupportMessage créé
+```
+
+### US-4 : Admin confirme un dépôt XMR
+
+```
+En tant qu'admin,
+je veux confirmer manuellement un dépôt XMR après vérification,
+afin de créditer le compte de l'utilisateur.
+
+Flux :
+1. Aller sur /mario-dashboard/deposits
+2. Trouver le dépôt XMR (status = awaiting)
+3. Cliquer "Confirm"
+4. Checklist XMR : vérifier TX hash sur blockchain Monero
+5. Saisir le montant USD à créditer
+6. Cliquer "Confirm & Credit"
+   → PATCH /api/admin/deposits/:id/confirm { usdAmount }
+7. Backend : Transaction(deposit) créée, Deposit.status = confirmed,
+   User.balance += usdAmount
+
+Résultat : balance utilisateur incrémentée
+```
+
+### US-5 : Admin gère un ticket support
+
+```
+En tant qu'admin,
+je veux répondre à un ticket et changer son statut,
+afin d'assurer le suivi des demandes.
+
+Flux :
+1. Aller sur /mario-dashboard/support
+2. Filtrer par status/priority, rechercher par subject
+3. Cliquer sur un ticket → AdminTicketDetail
+4. Lire la conversation (messages utilisateur + staff)
+5. Changer Status (open/in_progress/resolved/closed) et/ou Priority
+6. Cliquer "Update"
+   → PATCH /api/admin/support/tickets/:id/status { status }
+   → PATCH /api/admin/support/tickets/:id/priority { priority }
+7. Saisir une réponse (optionnellement cocher "Internal note")
+8. Cliquer "Send Reply"
+   → POST /api/admin/support/tickets/:id/messages { message, isInternal }
+9. Si isInternal=false → Deposit.response = "responded"
+
+Résultat : ticket mis à jour, message staff créé
+```
+
+### US-6 : Sweep ETH
+
+```
+En tant qu'admin,
+je veux collecter tous les ETH reçus vers mon adresse destination,
+afin de centraliser les fonds.
+
+Préconditions : ETH_HD_SEED + ALCHEMY_API_KEY configurés,
+                eth_address configurée dans Settings → Crypto
+
+Flux :
+1. Aller sur /mario-dashboard/settings → onglet "Crypto"
+2. Vérifier l'adresse ETH destination
+3. Cliquer "Sweep ETH to my address"
+4. Confirmer avec "Yes, sweep"
+5. POST /api/admin/eth/sweep
+6. Backend itère sur tous les Deposit ETH (status=confirmed)
+7. Pour chaque adresse HD wallet avec solde > gas cost :
+   - Calcule gas (21 000 × gasPrice)
+   - Signe et envoie tx vers eth_address
+8. Résultat : { swept: N, results: [...], skipped: [...] }
+
+Chaque result : { address, txHash, amountEth }
+Chaque skipped : { address, reason: "empty" | "balance too low..." | message }
+```
+
+---
+
+## Support — Côté Utilisateur
+
+### SupportPage (`/support`)
+
+**Fichier** : `frontend/src/pages/SupportPage.jsx`
+
+#### Structure UI
+```
+AccountSidebar (gauche)
+└── account-main
+    ├── .support-page-header
+    │   ├── <h3> Support
+    │   └── Button "Get Support" (toggle)
+    ├── .support-form-card (affiché si showForm=true)
+    │   └── <form>
+    │       ├── Select category
+    │       ├── Input subject *
+    │       ├── Textarea message *
+    │       └── Button "Submit Ticket"
+    └── .support-tickets-card
+        └── .credits-table-wrap
+            └── Table : Type | Support ticket # | Status | Response | Created
+```
+
+#### Catégories disponibles
+```js
+const CATEGORIES = [
+  'General', 'Order Issue', 'Payment', 'Shipping',
+  'Product Question', 'Account', 'Technical', 'Other'
+];
+```
+
+#### Validation côté frontend
+- `subject` : requis (non vide)
+- `message` : min 10 caractères (sinon erreur "Please provide more detail")
+
+#### Validation côté backend (Zod)
+```js
+z.object({
+  category: z.enum(['General','Order Issue','Payment','Shipping',
+                    'Product Question','Account','Technical','Other']),
+  subject:  z.string().min(1),
+  message:  z.string().min(10),
+})
+```
+
+#### Tableau des tickets (colonnes)
+| Colonne | Source données |
+|---------|---------------|
+| Type | `ticket.category` |
+| Support ticket # | `ticket.id` |
+| Status | `ticket.status` → badge `.credits-status-badge.open` |
+| Response | `ticket.response` ou `ticket.adminResponse` → "Replied" / "Pending" |
+| Created | `ticket.createdAt` formaté en `Mon DD, YYYY` |
+
+#### Endpoints utilisés
+```
+GET  /api/support/tickets    → charge la liste des tickets du user
+POST /api/support/tickets    → crée un nouveau ticket
+     Body: { category, subject, message }
+     Réponse: { ticket: { id, frontendId, category, status, response, createdAt, subject } }
+```
+
+#### Middleware auth : `optionalAuth`
+Les tickets peuvent être soumis sans être connecté (userId sera null). Si connecté, userId est associé.
+
+---
+
+### SupportWidget (FAB flottant)
+
+**Fichier** : `frontend/src/components/SupportWidget.jsx`
+
+Bouton flottant rond positionné en bas à droite de toutes les pages du store (inclus dans Layout global).
+
+#### Situations disponibles (9 + "Other")
+```js
+const SITUATIONS = [
+  'Missing/Wrong Items', 'Delayed Package', 'Website Bug',
+  'Cancelled Order', 'Emergency Contact', 'Website Feature Request',
+  'Deposit Issue', 'Product Requests', 'Missing Product Image',
+];
+```
+
+#### Sous-options (lien avec type)
+```js
+const SUB_OPTIONS = ['Order', 'Deposit', 'Not related'];
+```
+
+#### États (state machine)
+```
+null       → FAB visible, menu fermé
+"open"     → menuBox visible (2 boutons : Community Chat / Ask Support)
+"situations" → Modal centré sombre : grille de 9 situations
+"sub"      → Modal centré : "Is this related to an order or deposit?"
+"chat"     → Drawer latéral droit : conversation en temps réel
+```
+
+#### Flux création ticket automatique
+- Premier message envoyé → `POST /api/support/tickets`
+- Body : `{ subject: topic || 'Support request', category: situation || 'General', message: text }`
+- Les messages suivants ne créent **pas** de nouveaux tickets (déjà créé)
+- Réponse automatique agent après 900ms : "Thanks for reaching out — a support agent will reply here shortly."
+
+#### Structure HTML du drawer chat
+```
+.supw-drawer
+├── .supw-drawer-head (date + bouton fermer)
+├── .supw-drawer-thread (messages scrollables)
+│   ├── .supw-drawer-topic (titre du topic)
+│   └── .supw-dmsg.supw-dmsg--me | .supw-dmsg.supw-dmsg--agent
+│       ├── .supw-dbubble (texte)
+│       └── .supw-dtime (heure HH:MM)
+└── .supw-drawer-composer (form)
+    ├── .supw-drawer-input (input texte)
+    └── .supw-drawer-actions
+        ├── .supw-emoji-btn (SmileIcon — décoratif)
+        └── .supw-send-btn
+```
+
+---
+
+### Endpoints Support (utilisateur)
+
+```
+GET   /api/support/tickets          → liste tickets du user connecté
+POST  /api/support/tickets          → crée un ticket
+      Body: { category, subject, message }
+GET   /api/support/tickets/:id      → détail d'un ticket + messages (non-internes)
+POST  /api/support/tickets/:id/messages → ajoute un message utilisateur
+      Body: { message: string }
+      Effet secondaire : ticket.response = "pending"
+PATCH /api/support/tickets/:id/close → ferme le ticket
+      Conditions : status doit être "open" ou "in_progress"
+```
+
+**Protection** : middleware `optionalAuth` (fonctionne avec ou sans token).
+**Contrôle d'accès** : `checkOwnership(ticket, req)` — seul le créateur peut voir/modifier son ticket.
+
+---
+
+## Support — Côté Admin
+
+### AdminSupport (`/mario-dashboard/support`)
+
+**Fichier** : `frontend/src/pages/admin/AdminSupport.jsx`
+
+#### Chargement parallèle
+```js
+// Au premier chargement uniquement : charge stats + liste
+Promise.all([
+  adminFetch('/admin/support?...'),
+  adminFetch('/admin/support/stats'),
+])
+```
+
+#### 4 StatCards (bandeau haut)
+| Label | Couleur | Valeur |
+|-------|---------|--------|
+| Open | #2196f3 | `stats.open` |
+| In Progress | #ff9800 | `stats.in_progress` |
+| Resolved | #43a047 | `stats.resolved` |
+| Closed | #6c757d | `stats.closed` |
+
+#### Filtres
+```
+SearchInput       → recherche par subject (insensible à la casse)
+Select "Status"   → open / in_progress / resolved / closed
+Select "Priority" → urgent / high / normal / low
+```
+
+#### Tableau
+Colonnes : **Subject** (bold, max-width 200px) / **User** (username) / **Status** (badge) / **Priority** (badge) / **Assignee** (username ou "—") / **Date** (toLocaleDateString) / **Bouton "Open"**
+
+Clic sur une ligne → navigation vers `/mario-dashboard/support/:id`
+
+#### Endpoint
+```
+GET /api/admin/support?page=1&limit=20&status=…&priority=…&search=…
+Réponse: { tickets: [...], total, pagination }
+Chaque ticket inclut : lastMessage (dernier message), user { id, username }
+```
+
+```
+GET /api/admin/support/stats
+Réponse: { open: N, in_progress: N, resolved: N, closed: N }
+```
+
+---
+
+### AdminTicketDetail (`/mario-dashboard/support/:id`)
+
+**Fichier** : `frontend/src/pages/admin/AdminTicketDetail.jsx`
+
+#### Layout 2 colonnes
+
+**Colonne gauche — Conversation**
+```
+.admin-thread (scrollable, auto-scroll vers le bas)
+└── Pour chaque message :
+    .admin-msg.staff ou .admin-msg.user (+ .internal si note interne)
+    ├── .admin-msg-meta → auteur (Staff/username) + " · Internal" si interne
+    ├── .admin-msg-body → texte du message
+    └── .admin-msg-time → toLocaleString()
+
+<form> Réponse admin :
+├── <textarea> "Write a reply…"
+├── Checkbox "Internal note" (isInternal)
+└── Button "Send Reply"
+```
+
+**Colonne droite — Contrôles**
+
+Card "Update Ticket" :
+```
+Select Status   : open | in_progress | resolved | closed
+Select Priority : urgent | high | normal | low
+Button "Update"
+```
+
+Card "Details" :
+```
+Category  : ticket.category
+Assignee  : ticket.assignee?.username || "Unassigned"
+Created   : toLocaleString()
+Updated   : toLocaleString()
+```
+
+#### Endpoints admin pour un ticket
+```
+GET   /api/admin/support/:id
+      Réponse: { ticket: { ...fields, messages: [...], user, assignee } }
+      Note : messages filtrés à isInternal=false côté user,
+             mais TOUS visibles côté admin
+
+POST  /api/admin/support/:id/messages
+      → /api/admin/support/tickets/:id/messages (route backend)
+      Body: { message: string, isInternal: boolean }
+      Si isInternal=false → ticket.response = "responded"
+      Si isInternal=true  → note interne, pas de changement response
+
+PATCH /api/admin/support/:id
+      → Combine status + priority en un seul appel
+      Body: { status, priority }
+      (Note : le backend a des routes séparées pour status et priority)
+
+Routes backend séparées :
+PATCH /api/admin/support/tickets/:id/status   → { status }
+PATCH /api/admin/support/tickets/:id/priority → { priority }
+PATCH /api/admin/support/tickets/:id/assign   → { adminId }
+```
+
+#### Statuts et transitions valides
+```
+open       → in_progress | resolved | closed
+in_progress → resolved | closed
+resolved   → closed (ou ré-ouverture)
+closed     → (terminal)
+
+Priorités : urgent | high | normal | low
+```
+
+---
+
+### Schéma BDD — Support
+
+```prisma
+model SupportTicket {
+  id         Int      @id @default(autoincrement())
+  frontendId String?  @unique   // généré par formatTicketId(Date.now())
+  userId     Int?               // null si ticket anonyme
+  category   String   @default("General")
+  subject    String
+  status     String   @default("open")     // open | in_progress | resolved | closed
+  response   String   @default("pending")  // pending | responded (côté admin)
+  priority   String   @default("normal")   // urgent | high | normal | low
+  assignedTo Int?               // FK → User (admin ou modérateur)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user          User?          @relation("TicketCreator", ...)
+  assignedAdmin User?          @relation("TicketAssignee", ...)
+  messages      SupportMessage[]
+}
+
+model SupportMessage {
+  id         Int      @id @default(autoincrement())
+  ticketId   Int
+  userId     Int?               // null si message anonyme
+  body       String
+  isStaff    Boolean  @default(false)   // true = message admin/staff
+  isInternal Boolean  @default(false)   // true = note interne (non visible user)
+  createdAt  DateTime @default(now())
+
+  ticket SupportTicket @relation(...)
+}
+```
+
+---
+
+## Notifications
+
+### Vue d'ensemble
+
+Les notifications sont stockées en base de données (table `Notification`). Elles sont créées automatiquement par le backend lors d'événements clés (3 notifications de bienvenue à l'inscription).
+
+**Côté frontend** : pas de composant de cloche en temps réel connecté à l'API. La cloche dans `Header.jsx` affiche des notifications statiques (`DEFAULT_NOTIFICATIONS`) avec un point rouge qui disparaît au survol (`notifSeen=true`). La vraie lecture des notifications API se fait via la page Settings (Telegram QR).
+
+**Canal de notification principal** : **Telegram** (pas d'email). L'utilisateur scanne un QR code dans Settings → Notifications pour lier son compte Telegram.
+
+---
+
+### Endpoints Notifications
+
+```
+GET   /api/notifications          → liste toutes les notifications du user
+      Réponse: {
+        notifications: [{ id, type, title, body, isRead, link, time }],
+        unreadCount: N
+      }
+      "time" = formatRelativeTime(createdAt) :
+        < 1min → "Just now"
+        < 60min → "Xm ago"
+        < 24h → "Xh ago"
+        sinon → "Xd ago"
+
+PATCH /api/notifications/:id/read    → marque une notif comme lue
+      Réponse: { unreadCount: N }
+
+PATCH /api/notifications/read-all   → marque toutes comme lues
+      Réponse: { updated: N }
+```
+
+**Middleware** : `requireAuth` sur toutes les routes.
+**Ordre des routes** : `read-all` est déclaré AVANT `/:id/read` pour éviter l'ambiguïté Express.
+
+---
+
+### Schéma BDD — Notification
+
+```prisma
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String             // type d'événement (libre, ex: "welcome", "order", "deposit")
+  title     String
+  body      String   @default("")
+  isRead    Boolean  @default(false)
+  link      String   @default("")   // URL de navigation (ex: "/orders/123")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+```
+
+---
+
+### Notifications de bienvenue (créées à l'inscription)
+
+Lors du `POST /api/auth/register`, 3 notifications sont créées automatiquement :
+
+```js
+// Exemple de structure (logique backend auth.controller.js)
+await prisma.notification.createMany({
+  data: [
+    { userId, type: 'welcome', title: 'Welcome!', body: 'Browse our latest products.', link: '/' },
+    { userId, type: 'info', title: 'New arrivals in Accessories!', body: '', link: '/explore' },
+    { userId, type: 'info', title: 'Limited stock on Focus V Aeris Kit.', body: '', link: '/product/focus-v-aeris-kit' },
+  ]
+})
+```
+
+---
+
+### Header — Cloche de notifications (statique)
+
+**Fichier** : `frontend/src/components/Header.jsx`
+
+```jsx
+// État local, pas connecté à l'API
+const [notifSeen, setNotifSeen] = useState(false);
+
+const DEFAULT_NOTIFICATIONS = [
+  { id: 1, text: 'Welcome! Browse our latest products.', time: 'Just now' },
+  { id: 2, text: 'New arrivals in Accessories!', time: '2h ago' },
+  { id: 3, text: 'Limited stock on Focus V Aeris Kit.', time: '5h ago' },
+];
+
+// Au survol de .notif-wrap → setNotifSeen(true) → point rouge disparaît
+// Lien "View all" → /news
+```
+
+**Structure HTML** :
+```
+.notif-wrap (onMouseEnter → notifSeen=true)
+├── button.icon-btn
+│   ├── <BellIcon />
+│   └── .notif-dot (visible si !notifSeen)
+└── .notif-menu (dropdown au survol)
+    ├── .notif-menu-header "Notifications"
+    ├── .notif-item × 3
+    │   ├── .notif-text
+    │   └── .notif-time
+    └── <Link to="/news"> "View all"
+```
+
+---
+
+### Préférences de notification (SettingsPage)
+
+L'utilisateur configure ses préférences dans Settings → Notifications.
+
+**5 toggles disponibles** :
+| Clé (`notifToggles`) | Label affiché | Champ User (BDD) |
+|---------------------|---------------|-----------------|
+| `orders` | Orders | `notifOrders` |
+| `deposits` | Deposits | `notifDeposits` |
+| `tickets` | Tickets | `notifTickets` |
+| `newProducts` | New products | `notifNewProducts` |
+| `logins` | Logins | `notifLogins` |
+
+**Canal** : Telegram. Scan du QR code dans la page Settings pour lier le compte Telegram à l'account.
+Bouton "Auto-link Telegram" → lien Telegram deep link vers le bot.
+
+---
+
+## Paramètres Utilisateur (`/settings`)
+
+### Fichier source
+`frontend/src/pages/SettingsPage.jsx`
+
+### Layout général
+```
+AccountSidebar (gauche)
+└── account-main
+    ├── <h3> Settings
+    ├── Row 1 : 2 colonnes
+    │   ├── Card 2FA
+    │   └── Card Change Password
+    ├── Card Hide Prices
+    ├── Card Notifications (QR + toggles)
+    └── Card API Keys
+```
+
+---
+
+### Card 2FA — `settings-card`
+
+2 onglets : **"Change/Add 2fa"** | **"Remove 2fa"**
+
+```
+Onglet "Change/Add 2fa" :
+  Title : "Add Two Factor Authentication"
+  Description : "Add extra security on your account..."
+  Input : "Current password"
+  Button : "Submit"
+
+Onglet "Remove 2fa" :
+  Title : "Remove Two Factor Authentication"
+  Description : "Remove two factor authentication..."
+  Input : "Current password"
+  Button : "Submit"
+```
+
+**Note** : 2FA UI prête côté frontend mais backend non implémenté (`handle2FASubmit` appelle `showToast` seulement). Les champs `twoFaSecret` et `twoFaEnabled` existent dans la DB `User`.
+
+---
+
+### Card Change Password
+
+**Validation frontend (en temps réel)** :
+```js
+function checkPassword(pw) {
+  return {
+    notEmpty:  pw.length > 0,
+    noSpaces:  pw.length > 0 && !pw.includes(' '),
+    minLength: pw.length >= 8,
+    hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw),
+    hasNumber: /\d/.test(pw),
+    hasUpper:  /[A-Z]/.test(pw),
+    hasLower:  /[a-z]/.test(pw),
+  };
+}
+// Score 0–7 → trop faible (<= 2), Faible (<= 4), Bon (<= 6), Fort (7)
+// Couleurs : #e53935 | #ff9800 | #fdd835 | #43a047
+```
+
+**Barre de force** : `width = (score / 7) * 100%`, couleur dynamique.
+
+**8 requirements (avec icônes ✓/✗)** :
+1. Passwords match
+2. Not empty
+3. No spaces
+4. 8+ characters
+5. 1+ symbol
+6. 1+ number
+7. 1+ capital letter
+8. 1+ lowercase letter
+
+**Endpoint** :
+```
+PUT /api/profile/password
+Body: { currentPassword, newPassword }
+```
+
+**Règle** : `pwScore >= 5` requis avant soumission.
+**Affichage** : 3 champs avec bouton eye-icon show/hide pour chacun.
+
+---
+
+### Card Hide Prices
+
+Toggle switch. Quand activé : les prix sont masqués sur les pages Explore, Shop et produit.
+
+**Champ BDD** : `User.hidePrices` (Boolean)
+
+---
+
+### Card Notifications
+
+**QR Code** :
+- SVG inline (140×140 px), motif QR simplifié
+- Bouton "Auto-link Telegram" avec `<TelegramLinkIcon />`
+- Texte informatif : "Notifications are sent via telegram. To start receiving notifications, scan the QR with telegram on your phone."
+- Note sur les limitations Tor/navigateurs
+
+**5 Toggle switches** pour `orders | deposits | tickets | newProducts | logins`
+
+---
+
+### Card API Keys
+
+Pour accéder à l'API produits (`/api/products/scrape`).
+
+**Usage** :
+```bash
+curl -H "x-api-key: <api-key>" <url>/api/products/scrape
+```
+
+**Génération** :
+```
+POST /api/profile/api-keys
+Réponse: { apiKey: { key: "sk-xxxxx..." } }
+Fallback si erreur : génère une clé locale "sk-" + 32 chars aléatoires
+```
+
+**Suppression** :
+```
+DELETE /api/profile/api-keys/:id
+```
+
+**Affichage de chaque clé** :
+```
+<code> clé complète | [CopyIcon] [TrashIcon rouge]
+```
+
+---
+
+## System Status
+
+### Fichiers sources
+- `backend/src/controllers/admin/settings.controller.js` (Admin)
+- Présumé : `frontend/src/pages/SystemStatusPage.jsx` (côté user)
+
+### Endpoints
+```
+// Lecture (tous)
+GET  /api/admin/system-status
+     Réponse: { services: [...], incidents: [...] }
+
+// Mise à jour d'un service (admin)
+PUT  /api/admin/system-status/:id
+     Body: { status?, uptimePct?, description? }
+
+// Incidents (admin)
+GET  /api/admin/system-status/incidents
+     Réponse: { incidents: [...] } (100 derniers)
+
+POST /api/admin/system-status/incidents
+     Body: { dateLabel, title, status?, description? }
+     Valeurs status : "resolved" (défaut), ou autres
+
+PUT  /api/admin/system-status/incidents/:id
+     Body: { dateLabel?, title?, status?, description? }
+
+DELETE /api/admin/system-status/incidents/:id
+```
+
+### Schéma BDD
+
+```prisma
+model SystemStatus {
+  id          Int      @id @default(autoincrement())
+  service     String   @unique    // Nom du service (ex: "API", "Website", "Payment")
+  description String   @default("")
+  status      String   @default("operational")
+              // operational | degraded | partial_outage | major_outage
+  uptimePct   String   @default("100%")   // string (ex: "99.9%")
+  updatedAt   DateTime @updatedAt
+}
+
+model SystemIncident {
+  id          Int      @id @default(autoincrement())
+  dateLabel   String             // ex: "July 3, 2026" (label affiché)
+  title       String             // titre de l'incident
+  status      String   @default("resolved")  // resolved | investigating | monitoring
+  description String   @default("")
+  createdAt   DateTime @default(now())
+}
+```
+
+---
+
+## Webhooks — Flux Détaillé
+
+### BlockCypher (BTC / LTC / DOGE)
+
+**Endpoint** : `POST /api/webhooks/blockcypher`
+
+**Type 1 : Payment Forwarding Callback** (principal)
+```
+Payload reçu :
+{
+  input_address: "1ABC...",      // adresse de dépôt unique
+  destination: "1XYZ...",        // adresse admin destination
+  value: 123456,                 // montant en satoshis
+  input_transaction_hash: "abc", // hash TX entrant
+  transaction_hash: "def"        // hash TX sortante (après forward)
+}
+
+Traitement :
+1. Réponse 200 immédiate (BlockCypher retente si timeout)
+2. Cherche Deposit avec address=input_address, currency IN [BTC,LTC,DOGE], status IN [awaiting,partial]
+3. GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd
+4. usdAmount = (satoshis / 1e8) * priceUSD (arrondi 2 décimales)
+5. confirmDepositManually(deposit.id, usdAmount, null, txHash)
+6. deleteBlockCypherForwarding(currency, deposit.hookId)
+   → DELETE https://api.blockcypher.com/v1/{chain}/forwards/{id}?token=TOKEN
+```
+
+**Type 2 : Confirmed TX Webhook** (fallback legacy)
+```
+Payload : { addresses: [...], outputs: [...], confirmations: N, hash }
+Condition : confirmations >= 1
+Calcule satoshis depuis outputs.filter(o => o.addresses.includes(address))
+```
+
+**Suppression du forwarding** : après confirmation, le forwarding BlockCypher est supprimé pour éviter de recevoir à nouveau.
+
+### Alchemy (ETH)
+
+**Endpoint** : `POST /api/webhooks/alchemy`
+
+```
+Vérification signature :
+HMAC-SHA256(body_json, ALCHEMY_SIGNING_KEY) doit == header x-alchemy-signature
+
+Type attendu : "ADDRESS_ACTIVITY"
+Filtre : activity.category === "external" && activity.asset === "ETH"
+
+Pour chaque activité :
+1. toAddress en lowercase
+2. Cherche Deposit ETH avec address (insensitive) IN [awaiting,partial]
+3. GET CoinGecko price pour "ethereum"
+4. usdAmount = act.value (en ETH) × priceUSD
+5. confirmDepositManually(deposit.id, usdAmount, null, act.hash)
+```
+
+### Fonction `confirmDepositManually` (wallet.service.js)
+
+Utilisée par les webhooks ET par l'admin pour confirmer manuellement :
+
+```js
+// Utilise une transaction Prisma atomique
+prisma.$transaction(async tx => {
+  // 1. Crée Transaction type=deposit
+  const txn = await tx.transaction.create({
+    data: {
+      frontendId: formatTxnId(Date.now()),
+      userId:     deposit.userId,
+      type:       'deposit',
+      amount:     usdAmount,
+      currency:   deposit.currency,
+      status:     'confirmed',
+      note:       `Deposit #${deposit.id}`,
+      txHash:     txHash || undefined,
+    }
+  });
+
+  // 2. Update Deposit
+  await tx.deposit.update({
+    where: { id: deposit.id },
+    data: {
+      transactionId: txn.id,
+      status:        'confirmed',
+      usdCredited:   usdAmount,
+      confirmedAt:   new Date(),
+    }
+  });
+
+  // 3. Incrémente balance user
+  await tx.user.update({
+    where: { id: deposit.userId },
+    data:  { balance: { increment: usdAmount } }
+  });
+
+  return { newBalance: parseFloat(updatedUser.balance) };
+});
+```
+
+---
+
+## ETH Sweep — Logique Complète
+
+**Fichier** : `backend/src/controllers/admin/eth.controller.js`
+
+```
+POST /api/admin/eth/sweep
+
+Préconditions vérifiées :
+1. ETH_HD_SEED configuré (12 mots seed phrase)
+2. ALCHEMY_API_KEY configuré
+3. eth_address dans SiteSetting configurée
+
+Provider : Alchemy JSON-RPC
+URL : https://eth-mainnet.g.alchemy.com/v2/{ALCHEMY_API_KEY}
+
+Pour chaque Deposit ETH (status=confirmed, ethIndex non null) :
+  1. Dériver wallet : HDNodeWallet.fromPhrase(seed, undefined, `m/44'/60'/0'/0/${ethIndex}`)
+  2. wallet.connect(provider)
+  3. balance = await provider.getBalance(wallet.address)
+  4. Si balance === 0n → skipped (reason: "empty")
+  5. gasPrice = feeData.maxFeePerGas || feeData.gasPrice || 20 gwei
+  6. gasCost = 21_000n × gasPrice
+  7. Si balance <= gasCost → skipped (reason: "balance too low to cover gas")
+  8. Envoyer tx : { to: destination, value: balance - gasCost, gasLimit: 21000n }
+  9. Ajouter à swept : { address, txHash: tx.hash, amountEth }
+
+Réponse :
+{
+  swept: N,                    // nombre d'adresses sweep avec succès
+  results: [{ address, txHash, amountEth }],
+  skipped: [{ address, reason }]
+}
+```
+
+---
+
+## Schéma de Base de Données — Complet
+
+### User (complet)
+
+```prisma
+model User {
+  id                   Int       @id @default(autoincrement())
+  passwordHash         String
+  username             String    @unique
+  email                String?   @unique
+  markupPct            Decimal   @default(0) @db.Decimal(5, 2)
+  signalDetails        String?
+  sessionDetails       String?
+  btcRefundAddress     String?
+  xmrRefundAddress     String?
+  telegramHandle       String?
+  avatarUrl            String    @default("")
+  bio                  String    @default("")
+  role                 String    @default("customer")    // customer | moderator | admin
+  isActive             Boolean   @default(true)
+  tourCompleted        Boolean   @default(false)
+  balance              Decimal   @default(0) @db.Decimal(10, 2)
+  points               Int       @default(0)
+  totalSpent           Decimal   @default(0) @db.Decimal(10, 2)
+  twoFaSecret          String?
+  twoFaEnabled         Boolean   @default(false)
+  notifOrders          Boolean   @default(false)
+  notifDeposits        Boolean   @default(false)
+  notifTickets         Boolean   @default(false)
+  notifNewProducts     Boolean   @default(false)
+  notifLogins          Boolean   @default(false)
+  hidePrices           Boolean   @default(false)
+  lastLoginAt          DateTime?
+  passwordResetToken   String?
+  passwordResetExpiry  DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  orders          Order[]
+  transactions    Transaction[]
+  deposits        Deposit[]
+  apiKeys         ApiKey[]
+  wishlists       Wishlist[]
+  notifications   Notification[]
+  reviews         Review[]
+  supportTickets  SupportTicket[] @relation("TicketCreator")
+  assignedTickets SupportTicket[] @relation("TicketAssignee")
+  giveawayEntries GiveawayEntry[]
+  news            News[]          @relation("NewsAuthor")
+  teamOwned       TeamMember[]    @relation("TeamOwner")
+  teamMemberships TeamMember[]    @relation("TeamMember")
+}
+```
+
+### Order (complet)
+
+```prisma
+model Order {
+  id             Int      @id @default(autoincrement())
+  frontendId     String?  @unique     // ex: "ORD-001234"
+  userId         Int
+  status         String   @default("processing")
+                          // processing | shipped | delivered | cancelled | refunded
+  paymentMethod  String                // XMR | BTC | DOGE | LTC (informatif)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  shippingCost   Decimal  @default(16.99) @db.Decimal(10, 2)
+  totalAmount    Decimal  @db.Decimal(10, 2)
+  pointsEarned   Int      @default(0)
+  shipName       String
+  shipEmail      String
+  shipAddress    String
+  shipCity       String
+  shipPostal     String
+  shipCountry    String   @default("US")
+  trackingNumber String?
+  notes          String   @default("")
+  placedAt       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(...)
+  items        OrderItem[]
+  transactions Transaction[]
+}
+
+model OrderItem {
+  id              Int     @id @default(autoincrement())
+  orderId         Int
+  productId       Int?
+  productOptionId Int?
+  productName     String   // snapshot du nom au moment de la commande
+  productBrand    String
+  productImageUrl String  @default("")
+  unitPrice       Decimal @db.Decimal(10, 2)
+  priceType       String  @default("usd")
+  quantity        Int
+  lineTotal       Decimal @db.Decimal(10, 2)
+
+  order         Order          @relation(...)
+  product       Product?       @relation(...)
+  productOption ProductOption? @relation(...)
+}
+```
+
+### TeamMember
+
+```prisma
+model TeamMember {
+  id             Int       @id @default(autoincrement())
+  ownerId        Int                // User qui invite
+  memberId       Int?               // User invité (null si non encore accepté)
+  inviteUsername String             // username invité
+  status         String   @default("pending")  // pending | accepted | rejected
+  invitedAt      DateTime @default(now())
+  joinedAt       DateTime?
+
+  owner  User  @relation("TeamOwner", ...)
+  member User? @relation("TeamMember", ...)
+}
+```
+
+### Wishlist
+
+```prisma
+model Wishlist {
+  userId    Int
+  productId Int
+  createdAt DateTime @default(now())
+
+  user    User    @relation(...)
+  product Product @relation(...)
+
+  @@id([userId, productId])   // clé composite, une entrée par paire user/produit
+}
+```
+
+### Review
+
+```prisma
+model Review {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  userId     Int?                // null si anonyme
+  rating     Int                 // 1–5
+  title      String   @default("")
+  body       String   @default("")
+  isApproved Boolean  @default(false)  // requiert approbation admin
+  createdAt  DateTime @default(now())
+}
+```
+
+### Content (News, Giveaway, FAQ)
+
+```prisma
+model News {
+  id          Int       @id @default(autoincrement())
+  title       String
+  slug        String    @unique
+  category    String    @default("")
+  excerpt     String    @default("")
+  body        String    @default("")
+  imageUrl    String?
+  tag         String    @default("")
+  tagColor    String    @default("#607d8b")
+  isPublished Boolean   @default(false)
+  authorId    Int?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model Giveaway {
+  id            Int       @id @default(autoincrement())
+  title         String
+  badge         String    @default("")
+  gradientFrom  String    @default("#e91e63")
+  gradientTo    String    @default("#9c27b0")
+  gradientAngle Int       @default(135)
+  value         String    @default("")          // ex: "$500 value"
+  description   String    @default("")
+  prizes        Json      @default("[]")        // tableau de prix
+  endsAt        DateTime?
+  maxEntries    Int?
+  entriesCount  Int       @default(0)
+  winnersCount  Int       @default(1)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  entries GiveawayEntry[]
+}
+
+model GiveawayEntry {
+  id         Int      @id @default(autoincrement())
+  giveawayId Int
+  userId     Int
+  enteredAt  DateTime @default(now())
+
+  @@unique([giveawayId, userId])   // un seul entry par user par giveaway
+}
+
+model Faq {
+  id        Int      @id @default(autoincrement())
+  question  String
+  answer    String
+  sortOrder Int      @default(0)    // pour réorganisation drag-and-drop
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+```
+
+### SiteSetting — clés complètes
+
+```prisma
+model SiteSetting {
+  key   String @id
+  value String
+  type  String @default("string")  // string | boolean | number
+}
+```
+
+Toutes les clés utilisées :
+
+| Clé | Type | Description |
+|-----|------|-------------|
+| `site_name` | string | Nom du site |
+| `maintenance_mode` | boolean | Si "true" → store inaccessible |
+| `registration_open` | boolean | Si "false" → inscriptions bloquées |
+| `shipping_cost` | number | Coût livraison ($) |
+| `shipping_free_threshold` | number | Seuil livraison gratuite ($) |
+| `shipping_deadline_h` | number | Heure du timer livraison same-day |
+| `shipping_deadline_m` | number | Minute du timer livraison same-day |
+| `points_rate` | number | Points gagnés par $1 dépensé (ex: 0.5) |
+| `deposit_expiry_hours` | number | Durée de vie adresses dépôt (défaut 12) |
+| `min_deposit` | number | Dépôt minimum ($) |
+| `max_deposit` | number | Dépôt maximum ($) |
+| `btc_address` | string | Adresse BTC destination (auto-forward) |
+| `ltc_address` | string | Adresse LTC destination (auto-forward) |
+| `doge_address` | string | Adresse DOGE destination (auto-forward) |
+| `eth_address` | string | Adresse ETH destination (sweep manuel) |
+| `xmr_address` | string | Adresse XMR unique partagée |
+
+**Lecture** : `GET /api/admin/settings` → `{ settings: { key: value, ... } }`
+**Écriture** : `PUT /api/admin/settings` → Body `{ key: value, ... }` (upsert en transaction)
+
+---
+
+## Endpoints API — Complets et Détaillés
+
+### Auth
+```
+POST /api/auth/register   Body: { username, password }
+POST /api/auth/login      Body: { username, password }   → { token, refreshToken, user }
+POST /api/auth/refresh    Body: { refreshToken }          → { token }
+POST /api/auth/logout
+```
+
+### Profile (requireAuth)
+```
+GET  /api/profile
+PUT  /api/profile         Body: { bio, telegramHandle, signalDetails,
+                                  sessionDetails, btcRefundAddress, xmrRefundAddress }
+PUT  /api/profile/password  Body: { currentPassword, newPassword }
+POST /api/profile/api-keys  → génère une nouvelle API key
+DELETE /api/profile/api-keys/:id
+```
+
+### Wallet (requireAuth)
+```
+GET  /api/wallet              → { balance, points, totalSpent, tier, cashback, remaining, daysLeft }
+GET  /api/wallet/balance      → { balance }
+GET  /api/wallet/deposits     → { deposits, pagination }
+GET  /api/wallet/deposits/:id
+POST /api/wallet/deposit      Body: { currency: "BTC"|"LTC"|"DOGE"|"ETH"|"XMR" }
+                              → { depositId, address, currency, expiresAt }
+GET  /api/wallet/transactions → { transactions, pagination }
+```
+
+### Commandes (requireAuth)
+```
+GET  /api/orders
+POST /api/orders    Body: { items:[{productId,quantity}], shippingAddress,
+                            paymentMethod, name, email }
+                    → { order, newBalance }
+GET  /api/orders/:id
+```
+
+### Support (optionalAuth)
+```
+GET   /api/support/tickets
+POST  /api/support/tickets      Body: { category, subject, message }
+GET   /api/support/tickets/:id
+POST  /api/support/tickets/:id/messages   Body: { message }
+PATCH /api/support/tickets/:id/close
+```
+
+### Notifications (requireAuth)
+```
+GET   /api/notifications         → { notifications:[...], unreadCount }
+PATCH /api/notifications/read-all
+PATCH /api/notifications/:id/read
+```
+
+### Webhooks (publics — pas d'auth)
+```
+POST /api/webhooks/blockcypher   → confirmation BTC/LTC/DOGE
+POST /api/webhooks/alchemy       → confirmation ETH
+```
+
+### Contenu public
+```
+GET /api/content/settings        → settings publics pour le frontend
+GET /api/categories
+GET /api/products
+GET /api/products/scrape         Header: x-api-key (ApiKey)
+GET /api/news
+GET /api/faq
+```
+
+### Admin (requireAuth + requireAdmin)
+```
+// Dashboard
+GET /api/admin/dashboard
+
+// Users
+GET    /api/admin/users?page&limit&search&tier&role&isActive&sortBy&sortOrder
+POST   /api/admin/users              Body: { username, password, role }
+GET    /api/admin/users/:id
+PUT    /api/admin/users/:id          Body: { username, role, isActive, markupPct }
+PATCH  /api/admin/users/:id/ban
+PATCH  /api/admin/users/:id/password Body: { password }
+POST   /api/admin/users/:id/wallet/adjust  Body: { type, amount, reason }
+
+// Orders
+GET   /api/admin/orders?page&limit&search&status&paymentMethod
+PATCH /api/admin/orders/:id/status   Body: { status }
+PATCH /api/admin/orders/:id/tracking Body: { trackingNumber, carrier }
+
+// Products
+GET    /api/admin/products
+POST   /api/admin/products           multipart/form-data (image upload)
+GET    /api/admin/products/:id
+PUT    /api/admin/products/:id
+DELETE /api/admin/products/:id
+PATCH  /api/admin/products/:id/stock Body: { stock }
+
+// Deposits
+GET   /api/admin/deposits?page&limit&status&currency
+PATCH /api/admin/deposits/:id/confirm Body: { usdAmount, note? }
+PATCH /api/admin/deposits/:id/expire
+
+// Transactions
+GET /api/admin/transactions?page&limit&search&type&status&currency&dateFrom&dateTo
+
+// Support
+GET   /api/admin/support?page&limit&status&priority&search&category&assignedTo
+GET   /api/admin/support/stats       → { open, in_progress, resolved, closed }
+GET   /api/admin/support/:id         → ticket + messages + user + assignee
+POST  /api/admin/support/tickets/:id/messages  Body: { message, isInternal }
+PATCH /api/admin/support/tickets/:id/status    Body: { status }
+PATCH /api/admin/support/tickets/:id/priority  Body: { priority }
+PATCH /api/admin/support/tickets/:id/assign    Body: { adminId }
+
+// Reviews
+GET    /api/admin/reviews
+PATCH  /api/admin/reviews/:id/approve
+DELETE /api/admin/reviews/:id
+
+// Content
+GET    /api/admin/news
+POST   /api/admin/news
+PUT    /api/admin/news/:id
+DELETE /api/admin/news/:id
+GET    /api/admin/faq
+POST   /api/admin/faq
+PUT    /api/admin/faq/reorder   Body: [{ id, sortOrder }]
+PUT    /api/admin/faq/:id
+DELETE /api/admin/faq/:id
+GET    /api/admin/giveaways
+POST   /api/admin/giveaways
+PUT    /api/admin/giveaways/:id
+DELETE /api/admin/giveaways/:id
+GET    /api/admin/giveaways/:id/entries
+
+// Analytics
+GET /api/admin/analytics?period=7d|30d|90d|1y
+
+// Settings
+GET  /api/admin/settings
+PUT  /api/admin/settings   Body: { key: value, ... }
+
+// System Status
+GET    /api/admin/system-status
+PUT    /api/admin/system-status/:id  Body: { status?, uptimePct?, description? }
+GET    /api/admin/system-status/incidents
+POST   /api/admin/system-status/incidents  Body: { dateLabel, title, status?, description? }
+PUT    /api/admin/system-status/incidents/:id
+DELETE /api/admin/system-status/incidents/:id
+
+// ETH Sweep
+POST /api/admin/eth/sweep
+
+// Catalog (pour dropdowns du formulaire produit)
+GET /api/admin/categories
+GET /api/admin/brands
+```
+
+---
+
+## Utilitaires Backend
+
+### `formatTxnId` / `formatTicketId` (`utils/formatters.js`)
+Génère un ID lisible depuis un timestamp :
+```js
+formatTxnId(Date.now())    // utilisé pour Transaction.frontendId
+formatTicketId(Date.now()) // utilisé pour SupportTicket.frontendId
+```
+
+### `parsePaginationParams` + `buildPagination` (`utils/pagination.js`)
+```js
+// Entrée : req.query { page: "2", limit: "20" }
+// Sortie : { page: 2, limit: 20 } (avec guards)
+
+// buildPagination(page, limit, total)
+// Retourne : { page, limit, total, totalPages, hasNext, hasPrev }
+```
+
+### `asyncHandler` (`utils/asyncHandler.js`)
+Wrapper pour éviter try/catch dans chaque controller admin :
+```js
+const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+```
+
+### `apiResponse` (`utils/apiResponse.js`)
+```js
+success(res, data, statusCode = 200)
+// → { success: true, data: { ...data } }
+
+error(res, message, statusCode = 400)
+// → { success: false, error: message }
+```
+
+### `getTierInfo` (wallet.service.js)
+```js
+const TIERS = [
+  { name: 'basic',     minSpent: 0,    cashback: 0.005 },  // 0.5%
+  { name: 'preferred', minSpent: 1000, cashback: 0.010 },  // 1.0%
+  { name: 'gold',      minSpent: 2000, cashback: 0.013 },  // 1.3%
+  { name: 'platinum',  minSpent: 5000, cashback: 0.015 },  // 1.5%
+];
+
+// retourne : { name, minSpent, cashback, remaining }
+// remaining = écart jusqu'au prochain tier (0 si plateau)
+```
+
+### `deleteBlockCypherForwarding` (crypto.service.js)
+Appelée après confirmation d'un dépôt BTC/LTC/DOGE pour nettoyer le webhook :
+```
+DELETE https://api.blockcypher.com/v1/{chain}/forwards/{forwardingId}?token=TOKEN
+```
+
+---
+
+## Middlewares Backend
+
+### `requireAuth`
+- Extrait Bearer token du header Authorization
+- Vérifie JWT avec `JWT_SECRET`
+- Attache `req.user = { id, role, ... }`
+- 401 si token invalide ou absent
+
+### `requireAdmin`
+- Vérifie `req.user.role === 'admin'` (ou 'moderator' selon les routes)
+- 403 si insuffisant
+
+### `optionalAuth`
+- Tente de vérifier le token si présent
+- Attache `req.user` si valide
+- Passe silencieusement si pas de token (req.user = null)
+- Utilisé pour support tickets (anonymes autorisés)
+
+### `validate(schema)` (Zod)
+```js
+// Valide req.body contre un schéma Zod
+// 400 avec { success: false, error: { issues: [...] } } si invalide
+```
+
+### `uploadProductImage` (Multer)
+- Gère `multipart/form-data` pour upload image produit
+- Champ : `image` (single file)
+- Limite : `MAX_FILE_SIZE` (défaut 5 MB)
+- Destination : `UPLOAD_DIR` ou Cloudinary
+
+### `errorHandler` (global)
+- Catch-all Express error middleware
+- Retourne `{ success: false, error: message, status }` en JSON
