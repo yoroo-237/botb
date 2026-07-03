@@ -1,13 +1,25 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../utils/api.js'
 
 const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [balance, setBalance] = useState(0)
+  const [user, setUser]             = useState(null)
+  const [balance, setBalance]       = useState(0)
   const [loadingAuth, setLoadingAuth] = useState(true)
+  const [theme, setTheme]           = useState(
+    () => localStorage.getItem('botb_theme') || 'light'
+  )
+
+  // Apply theme on mount + change
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('botb_theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme(t => t === 'light' ? 'dark' : 'light')
+  }
 
   const loadUserData = useCallback(async () => {
     try {
@@ -15,7 +27,6 @@ export function AppProvider({ children }) {
         apiFetch('/auth/me'),
         apiFetch('/wallet/balance'),
       ])
-
       if (meData.status === 'fulfilled' && meData.value) {
         setUser(meData.value.user || meData.value)
       }
@@ -53,7 +64,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ user, balance, loadingAuth, login, logout, loadUserData }}>
+    <AppContext.Provider value={{ user, balance, loadingAuth, login, logout, loadUserData, theme, toggleTheme }}>
       {children}
     </AppContext.Provider>
   )

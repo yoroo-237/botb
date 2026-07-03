@@ -136,6 +136,26 @@
   line-height: 1;
 }
 
+/* Theme toggle */
+.themeToggle {
+  background: none;
+  border: 1px solid var(--color-accent-6);
+  border-radius: 8px;
+  color: var(--color-contrast);
+  cursor: pointer;
+  padding: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.themeToggle:hover {
+  background: var(--color-accent-5);
+  border-color: var(--color-accent-3);
+  color: var(--color-accent-3);
+}
+
 /* Hamburger (mobile only) */
 .hamburger {
   display: none;

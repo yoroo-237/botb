@@ -36,6 +36,17 @@
   --root-padding: var(--spacing-50);
 }
 
+/* ─── Dark Mode ─────────────────────────────── */
+[data-theme="dark"] {
+  --color-base:     #12121a;
+  --color-contrast: #EFEFEF;
+  --color-accent-1: #FFEE58;
+  --color-accent-2: #2b1f35;
+  --color-accent-3: #7c5ed4;
+  --color-accent-4: #9a9a9a;
+  --color-accent-5: #1c1c26;
+}
+
 /* ─── Reset ─────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

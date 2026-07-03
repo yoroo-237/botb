@@ -30,6 +30,7 @@ import AdminFaq from './pages/admin/AdminFaq.jsx'
 import AdminGiveaways from './pages/admin/AdminGiveaways.jsx'
 import AdminAnalytics from './pages/admin/AdminAnalytics.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
+import SupportPage from './pages/SupportPage/SupportPage.jsx'
 
 function LoadingScreen() {
   return (
@@ -111,6 +112,9 @@ export default function App() {
             } />
             <Route path="/wallet" element={
               <ProtectedRoute><PublicLayout><WalletPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/support" element={
+              <ProtectedRoute><PublicLayout><SupportPage /></PublicLayout></ProtectedRoute>
             } />
 
             {/* Admin */}
