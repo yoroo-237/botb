@@ -24,19 +24,20 @@ function AgeGate({ onVerify }) {
     <div className={styles.ageOverlay}>
       <div className={styles.ageModal}>
         <div className={styles.ageLogo}>BOTB</div>
+        <div className={styles.ageLogoBar} />
         <h2 className={styles.ageTitle}>Age Verification Required</h2>
         <p className={styles.ageMsg}>
-          You must be 21 or older to enter this site. By clicking "I am 21 or older", you confirm that you meet the minimum age requirement.
+          You must be 21 or older to enter this site. By clicking "Yes, I am 21+", you confirm that you meet the minimum age requirement.
         </p>
         <div className={styles.ageBtns}>
           <button className={styles.ageBtnPrimary} onClick={onVerify}>
-            I am 21 or older
+            Yes, I am 21 or older
           </button>
           <button
             className={styles.ageBtnSecondary}
             onClick={() => { window.location.href = 'https://www.google.com' }}
           >
-            Exit
+            No, Exit
           </button>
         </div>
       </div>
@@ -123,6 +124,7 @@ export default function LoginPage() {
       <div className={styles.pageInner}>
         <div className={styles.card}>
           <div className={styles.logo}>BOTB</div>
+          <div className={styles.logoBar} />
           <p className={styles.subtitle}>Best of the Bay</p>
 
           <div className={styles.tabs}>
