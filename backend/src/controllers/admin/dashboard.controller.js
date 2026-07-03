@@ -23,11 +23,11 @@ function startOfMonth() {
 
 export const dashboardController = {
   async get(req, res) {
-    const today   = startOfToday();
-    const month   = startOfMonth();
-    const week    = daysAgo(7);
-    const days30  = daysAgo(30);
-    const days7   = daysAgo(7);
+    const today  = startOfToday();
+    const month  = startOfMonth();
+    const week   = daysAgo(7);
+    const days30 = daysAgo(30);
+    const days7  = daysAgo(7);
 
     const [
       totalRev, todayRev, weekRev, monthRev,
@@ -71,63 +71,77 @@ export const dashboardController = {
       }),
       prisma.order.groupBy({ by: ['status'], _count: { id: true } }),
       prisma.orderItem.groupBy({
-        by:     ['productId', 'name'],
-        _sum:   { quantity: true },
+        by:      ['productId', 'name'],
+        _sum:    { quantity: true },
         orderBy: { _sum: { quantity: 'desc' } },
-        take:   5,
+        take:    5,
       }),
     ]);
 
-    // Revenue chart — 30 derniers jours
-    const revenueChart = await prisma.$queryRaw`
-      SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date,
-             ABS(SUM(amount))::float           as revenue
+    // Revenue chart — last 30 days
+    const revenueChartRaw = await prisma.$queryRaw`
+      SELECT TO_CHAR("createdAt", 'YYYY-MM-DD') as date,
+             ABS(SUM(amount))::float             as revenue
       FROM   "Transaction"
       WHERE  type = 'purchase'
-        AND  created_at >= ${days30}
-      GROUP  BY TO_CHAR(created_at, 'YYYY-MM-DD')
+        AND  "createdAt" >= ${days30}
+      GROUP  BY TO_CHAR("createdAt", 'YYYY-MM-DD')
       ORDER  BY date
     `;
 
-    // New users — 7 derniers jours
-    const newUsersChart = await prisma.$queryRaw`
-      SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date,
-             COUNT(*)::int                      as count
+    // New users — last 7 days
+    const newUsersChartRaw = await prisma.$queryRaw`
+      SELECT TO_CHAR("createdAt", 'YYYY-MM-DD') as date,
+             COUNT(*)::int                       as users
       FROM   "User"
-      WHERE  created_at >= ${days7}
-      GROUP  BY TO_CHAR(created_at, 'YYYY-MM-DD')
+      WHERE  "createdAt" >= ${days7}
+      GROUP  BY TO_CHAR("createdAt", 'YYYY-MM-DD')
       ORDER  BY date
     `;
 
-    const ordersStatusChart = Object.fromEntries(
-      ordersStatusRaw.map(s => [s.status, s._count.id]),
-    );
+    // Convert BigInt values from raw queries to numbers
+    const revenueChart  = revenueChartRaw.map(r => ({ date: r.date, revenue: Number(r.revenue || 0) }));
+    const newUsersChart = newUsersChartRaw.map(r => ({ date: r.date, users: Number(r.users || 0) }));
+
+    // ordersStatusChart as array [{name, value}] for PieChart
+    const ordersStatusChart = ordersStatusRaw.map(s => ({
+      name:  s.status,
+      value: s._count.id,
+    }));
 
     res.json(ok({
       stats: {
-        revenue: {
-          total:     Math.abs(Number(totalRev._sum.amount  || 0)),
-          today:     Math.abs(Number(todayRev._sum.amount  || 0)),
-          thisWeek:  Math.abs(Number(weekRev._sum.amount   || 0)),
-          thisMonth: Math.abs(Number(monthRev._sum.amount  || 0)),
-        },
-        orders:   { total: totalOrders, today: todayOrders, pending: pendingOrders, shipped: shippedOrders },
-        users:    { total: totalUsers,  newToday: todayUsers },
-        products: { total: totalProducts, lowStock: lowStockCount },
-        tickets:  { open: openTickets,   urgent: urgentTickets },
+        totalRevenue:    Math.abs(Number(totalRev._sum.amount   || 0)),
+        totalOrders,
+        pendingOrders,
+        shippedOrders,
+        totalUsers,
+        totalProducts,
+        openTickets,
+        revenueThisMonth: Math.abs(Number(monthRev._sum.amount || 0)),
+        // extras
+        revenueToday:    Math.abs(Number(todayRev._sum.amount  || 0)),
+        revenueThisWeek: Math.abs(Number(weekRev._sum.amount   || 0)),
+        urgentTickets,
+        todayOrders,
+        todayUsers,
+        lowStockCount,
       },
       charts: {
         revenueChart,
         ordersStatusChart,
         newUsersChart,
         topProducts: topProductsRaw.map(p => ({
-          name:      p.name,
-          totalSold: Number(p._sum.quantity || 0),
+          name:  p.name,
+          sales: Number(p._sum.quantity || 0),
         })),
       },
-      recentOrders,
+      recentOrders: recentOrders.map(o => ({
+        ...o,
+        total: Number(o.totalAmount || 0),
+      })),
       lowStockProducts,
-      recentUnassignedTickets: recentTickets,
+      recentTickets,
     }));
   },
 };
