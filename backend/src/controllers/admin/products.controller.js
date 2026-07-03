@@ -17,7 +17,7 @@ export const adminProductsController = {
       prisma.product.findMany({
         where, skip, take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { images: { take: 1, orderBy: { position: 'asc' } }, category: true, brand: true },
+        include: { images: { orderBy: { position: 'asc' } }, category: true, brand: true, _count: { select: { images: true } } },
       }),
       prisma.product.count({ where }),
     ]);
@@ -39,7 +39,7 @@ export const adminProductsController = {
         stock:       parseInt(stock || 0, 10),
         categoryId:  categoryId ? parseInt(categoryId, 10) : null,
         brandId:     brandId    ? parseInt(brandId, 10)    : null,
-        images:      images.length ? { create: images.map((img, i) => ({ url: img.url, thumbnail: img.thumbnail || null, position: i })) } : undefined,
+        images:      images.length ? { create: images.map((img, i) => ({ url: img.url, thumbnail: img.thumbnail || null, position: i, mediaType: img.mediaType || 'image' })) } : undefined,
       },
       include: { images: true, category: true },
     });
@@ -73,9 +73,11 @@ export const adminProductsController = {
 
   async addImage(req, res) {
     const productId = parseInt(req.params.id, 10);
-    const { url, thumbnail, position = 0 } = req.body;
+    const { url, thumbnail, position = 0, mediaType = 'image' } = req.body;
     if (!url) throw appError('url is required', 400);
-    const img = await prisma.productImage.create({ data: { productId, url, thumbnail: thumbnail || null, position: parseInt(position, 10) } });
+    const validTypes = ['image', 'video'];
+    const type = validTypes.includes(mediaType) ? mediaType : 'image';
+    const img = await prisma.productImage.create({ data: { productId, url, thumbnail: thumbnail || null, position: parseInt(position, 10), mediaType: type } });
     res.status(201).json(ok(img));
   },
 

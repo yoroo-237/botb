@@ -95,6 +95,7 @@ model ProductImage {
   url       String
   thumbnail String?
   position  Int     @default(0)
+  mediaType String  @default("image")  // image | video
 }
 
 // ─── ORDERS ───────────────────────────────────────────────────────────────────
