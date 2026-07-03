@@ -2,74 +2,89 @@
 .ageOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(10, 8, 25, 0.75);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  padding: 20px;
 }
 .ageModal {
   background: #1a1a2e;
-  border: 1px solid #503aa8;
-  border-radius: 12px;
-  padding: 48px 40px;
-  max-width: 480px;
-  width: 90%;
+  border: 1px solid rgba(80, 58, 168, 0.6);
+  border-radius: 20px;
+  padding: 32px 28px;
+  max-width: 360px;
+  width: 100%;
   text-align: center;
   color: #fff;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(80, 58, 168, 0.2);
+  animation: bubblePop 0.25s ease;
+}
+@keyframes bubblePop {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
 .ageLogo {
-  font-size: 2rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 800;
   color: #503aa8;
-  margin-bottom: 16px;
-  letter-spacing: 2px;
+  margin-bottom: 12px;
+  letter-spacing: 3px;
 }
 .ageTitle {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 12px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 10px;
   color: #fff;
 }
 .ageMsg {
-  color: #aaa;
-  margin-bottom: 32px;
-  line-height: 1.6;
+  color: #999;
+  margin-bottom: 24px;
+  line-height: 1.55;
+  font-size: 0.875rem;
 }
 .ageBtns {
   display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 .ageBtnPrimary {
   background: #503aa8;
   color: #fff;
   border: none;
-  padding: 12px 28px;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 11px 24px;
+  border-radius: 10px;
+  font-size: 0.95rem;
   cursor: pointer;
   font-weight: 600;
   transition: background 0.2s;
+  width: 100%;
 }
 .ageBtnPrimary:hover { background: #6248c9; }
 .ageBtnSecondary {
   background: transparent;
-  color: #aaa;
-  border: 1px solid #444;
-  padding: 12px 28px;
-  border-radius: 8px;
-  font-size: 1rem;
+  color: #777;
+  border: 1px solid #333;
+  padding: 9px 24px;
+  border-radius: 10px;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, color 0.2s;
+  width: 100%;
 }
-.ageBtnSecondary:hover { border-color: #888; color: #ddd; }
+.ageBtnSecondary:hover { border-color: #666; color: #bbb; }
 
 /* Page */
 .page {
   min-height: 100vh;
   background: #0d0d1a;
+  position: relative;
+}
+.pageInner {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;

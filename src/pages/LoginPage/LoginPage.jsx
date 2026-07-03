@@ -118,9 +118,9 @@ export default function LoginPage() {
   }
 
   return (
-    <>
+    <div className={styles.page}>
       {!ageVerified && <AgeGate onVerify={handleVerify} />}
-      <div className={styles.page}>
+      <div className={styles.pageInner}>
         <div className={styles.card}>
           <div className={styles.logo}>BOTB</div>
           <p className={styles.subtitle}>Best of the Bay</p>
@@ -209,6 +209,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

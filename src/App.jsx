@@ -31,10 +31,27 @@ import AdminGiveaways from './pages/admin/AdminGiveaways.jsx'
 import AdminAnalytics from './pages/admin/AdminAnalytics.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
 
+function LoadingScreen() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', background: '#0d0d1a', flexDirection: 'column', gap: '16px'
+    }}>
+      <div style={{
+        width: '36px', height: '36px', border: '3px solid #2a2a4a',
+        borderTop: '3px solid #503aa8', borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <span style={{ color: '#555', fontSize: '0.9rem' }}>Loading…</span>
+    </div>
+  )
+}
+
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loadingAuth } = useApp()
   const location = useLocation()
-  if (loadingAuth) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', fontSize: '1.2rem' }}>Loading…</div>
+  if (loadingAuth) return <LoadingScreen />
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   if (adminOnly && !['admin', 'moderator'].includes(user.role)) return <Navigate to="/" replace />
   return children
@@ -64,31 +81,39 @@ export default function App() {
       <CartProvider>
         <AppProvider>
           <Routes>
-            {/* Public routes with header/footer */}
-            <Route path="/" element={<PublicLayout><HomePage /></PublicLayout>} />
-            <Route path="/shop" element={<PublicLayout><HomePage /></PublicLayout>} />
-            <Route path="/product-category/:slug" element={<PublicLayout><CategoryPage /></PublicLayout>} />
-            <Route path="/product-category/:parent/:slug" element={<PublicLayout><CategoryPage /></PublicLayout>} />
-            <Route path="/product/:slug" element={<PublicLayout><ProductDetailPage /></PublicLayout>} />
-            <Route path="/cart" element={<PublicLayout><CartPage /></PublicLayout>} />
-            <Route path="/checkout" element={<PublicLayout><CheckoutPage /></PublicLayout>} />
-
-            {/* Profile & Wallet — protected */}
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <PublicLayout><ProfilePage /></PublicLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/wallet" element={
-              <ProtectedRoute>
-                <PublicLayout><WalletPage /></PublicLayout>
-              </ProtectedRoute>
-            } />
-
-            {/* Login — no header/footer */}
+            {/* Login — accessible sans auth, age gate intégré */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Admin — nested routes rendered in AdminLayout's <Outlet /> */}
+            {/* Toutes les pages nécessitent une connexion */}
+            <Route path="/" element={
+              <ProtectedRoute><PublicLayout><HomePage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/shop" element={
+              <ProtectedRoute><PublicLayout><HomePage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/product-category/:slug" element={
+              <ProtectedRoute><PublicLayout><CategoryPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/product-category/:parent/:slug" element={
+              <ProtectedRoute><PublicLayout><CategoryPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/product/:slug" element={
+              <ProtectedRoute><PublicLayout><ProductDetailPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/cart" element={
+              <ProtectedRoute><PublicLayout><CartPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/checkout" element={
+              <ProtectedRoute><PublicLayout><CheckoutPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute><PublicLayout><ProfilePage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/wallet" element={
+              <ProtectedRoute><PublicLayout><WalletPage /></PublicLayout></ProtectedRoute>
+            } />
+
+            {/* Admin */}
             <Route path="/mario-dashboard" element={<AdminGuard />}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
@@ -109,6 +134,8 @@ export default function App() {
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AppProvider>
       </CartProvider>
