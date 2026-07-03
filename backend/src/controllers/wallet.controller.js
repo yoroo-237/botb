@@ -40,7 +40,7 @@ export const walletController = {
   async createDeposit(req, res) {
     const { currency } = req.body;
     if (!currency) {
-      return res.status(400).json({ success: false, error: 'currency requis' });
+      return res.status(400).json({ success: false, error: 'currency is required' });
     }
     const deposit = await walletService.createDeposit(req.user.sub, currency.toUpperCase());
     res.status(201).json(ok(deposit));

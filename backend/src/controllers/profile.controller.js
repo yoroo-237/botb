@@ -34,6 +34,6 @@ export const profileController = {
       Object.entries(req.body).filter(([k]) => EDITABLE_FIELDS.includes(k)),
     );
     await prisma.user.update({ where: { id: req.user.sub }, data });
-    res.json(ok({ message: 'Profil mis à jour' }));
+    res.json(ok({ message: 'Profile updated' }));
   },
 };

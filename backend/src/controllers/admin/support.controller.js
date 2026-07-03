@@ -46,13 +46,13 @@ export const adminSupportController = {
 
   async reply(req, res) {
     const { message } = req.body;
-    if (!message?.trim()) throw appError('Message requis', 400);
+    if (!message?.trim()) throw appError('Message is required', 400);
 
     const ticketId = parseInt(req.params.id, 10);
     const ticket   = await prisma.supportTicket.findUniqueOrThrow({ where: { id: ticketId } });
 
     if (['resolved', 'closed'].includes(ticket.status)) {
-      throw appError('Ce ticket est fermé', 400);
+      throw appError('This ticket is closed', 400);
     }
 
     const msg = await prisma.ticketMessage.create({
@@ -75,7 +75,7 @@ export const adminSupportController = {
   async updateStatus(req, res) {
     const { status, assignedTo } = req.body;
     if (!VALID_STATUSES.includes(status)) {
-      throw appError(`Statut invalide. Valeurs: ${VALID_STATUSES.join(', ')}`, 400);
+      throw appError(`Invalid status. Valid values: ${VALID_STATUSES.join(', ')}`, 400);
     }
     const ticket = await prisma.supportTicket.update({
       where: { id: parseInt(req.params.id, 10) },

@@ -15,7 +15,7 @@ export const productService = {
     if (category) {
       const cat = await prisma.category.findUnique({ where: { slug: category } });
       if (cat) {
-        // Inclut les sous-catégories
+        // Include subcategories
         const children = await prisma.category.findMany({ where: { parentId: cat.id } });
         const ids      = [cat.id, ...children.map(c => c.id)];
         where.categoryId = { in: ids };

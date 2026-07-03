@@ -49,11 +49,11 @@ export const adminUsersController = {
 
   async create(req, res) {
     const { username, password, role = 'customer' } = req.body;
-    if (!username?.trim()) throw appError('Username requis', 400);
-    if (!password || password.length < 6) throw appError('Password requis (min 6 caractères)', 400);
+    if (!username?.trim()) throw appError('Username is required', 400);
+    if (!password || password.length < 6) throw appError('Password is required (min 6 characters)', 400);
 
     const exists = await prisma.user.findUnique({ where: { username: username.trim() } });
-    if (exists) throw appError('Ce username est déjà pris', 409);
+    if (exists) throw appError('Username already taken', 409);
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
@@ -97,16 +97,16 @@ export const adminUsersController = {
       where: { id },
       data:  { isActive: !user.isActive },
     });
-    res.json(ok({ isActive: updated.isActive, message: updated.isActive ? 'Compte réactivé' : 'Compte banni' }));
+    res.json(ok({ isActive: updated.isActive, message: updated.isActive ? 'Account reactivated' : 'Account banned' }));
   },
 
   async setPassword(req, res) {
     const id = parseInt(req.params.id, 10);
     const { password } = req.body;
-    if (!password || password.length < 6) throw appError('Password trop court (min 6 caractères)', 400);
+    if (!password || password.length < 6) throw appError('Password too short (min 6 characters)', 400);
     const passwordHash = await bcrypt.hash(password, 12);
     await prisma.user.update({ where: { id }, data: { passwordHash } });
-    res.json(ok({ message: 'Mot de passe mis à jour' }));
+    res.json(ok({ message: 'Password updated' }));
   },
 
   async adjustWallet(req, res) {

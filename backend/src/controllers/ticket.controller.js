@@ -13,8 +13,8 @@ export const ticketController = {
 
   async create(req, res) {
     const { subject, category = 'other', priority = 'normal', message } = req.body;
-    if (!subject?.trim()) throw appError('Le sujet est requis', 400);
-    if (!message?.trim()) throw appError('Le message est requis', 400);
+    if (!subject?.trim()) throw appError('Subject is required', 400);
+    if (!message?.trim()) throw appError('Message is required', 400);
 
     const ticket = await prisma.supportTicket.create({
       data: {
@@ -51,14 +51,14 @@ export const ticketController = {
 
   async reply(req, res) {
     const { message } = req.body;
-    if (!message?.trim()) throw appError('Le message est requis', 400);
+    if (!message?.trim()) throw appError('Message is required', 400);
 
     const ticket = await prisma.supportTicket.findFirstOrThrow({
       where: { id: parseInt(req.params.id, 10), userId: req.user.sub },
     });
 
     if (['resolved', 'closed'].includes(ticket.status)) {
-      throw appError('Ce ticket est fermé, vous ne pouvez plus répondre', 400);
+      throw appError('This ticket is closed, you can no longer reply', 400);
     }
 
     const msg = await prisma.ticketMessage.create({

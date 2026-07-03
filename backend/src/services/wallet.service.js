@@ -32,7 +32,7 @@ export const walletService = {
 
   async createDeposit(userId, currency) {
     const validCurrencies = ['BTC', 'LTC', 'DOGE', 'ETH', 'XMR'];
-    if (!validCurrencies.includes(currency)) throw appError('Devise non supportée', 400);
+    if (!validCurrencies.includes(currency)) throw appError('Unsupported currency', 400);
 
     const settings = await prisma.siteSetting.findMany({
       where: { key: { in: ['deposit_expiry_hours'] } },
@@ -40,12 +40,10 @@ export const walletService = {
     const expiryHours = parseInt(settings.find(s => s.key === 'deposit_expiry_hours')?.value || '12', 10);
     const expiresAt   = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
 
-    // Crée d'abord le dépôt pour obtenir l'ID (nécessaire pour ETH HD derivation)
     const deposit = await prisma.deposit.create({
       data: { userId, currency, expiresAt },
     });
 
-    // Génère l'adresse crypto
     const { address, hookId = null, ethIndex = null } = await cryptoService.generateAddress(currency, deposit.id);
 
     return prisma.deposit.update({
@@ -57,8 +55,8 @@ export const walletService = {
   async confirmDeposit(depositId, usdAmount, note = null) {
     const deposit = await prisma.deposit.findUniqueOrThrow({ where: { id: depositId } });
 
-    if (deposit.status === 'confirmed') throw appError('Ce dépôt est déjà confirmé', 409);
-    if (usdAmount <= 0) throw appError('Le montant USD doit être positif', 400);
+    if (deposit.status === 'confirmed') throw appError('This deposit is already confirmed', 409);
+    if (usdAmount <= 0) throw appError('USD amount must be positive', 400);
 
     return prisma.$transaction(async (tx) => {
       const txn = await tx.transaction.create({
@@ -69,7 +67,7 @@ export const walletService = {
           amount:     usdAmount,
           currency:   'USD',
           status:     'confirmed',
-          note:       note || `Dépôt ${deposit.currency} confirmé`,
+          note:       note || `${deposit.currency} deposit confirmed`,
         },
       });
 
@@ -90,20 +88,19 @@ export const walletService = {
 
       return txn;
     }).then(async (txn) => {
-      // Notification hors transaction pour ne pas la bloquer
       await notificationService.notifyDeposit(deposit.userId, deposit.currency, usdAmount);
       return txn;
     });
   },
 
   async adjustBalance(userId, type, amount, reason) {
-    if (!['credit', 'debit'].includes(type)) throw appError('Type invalide: "credit" ou "debit"', 400);
-    if (!reason || !reason.trim())           throw appError('La raison est obligatoire', 400);
-    if (amount <= 0)                          throw appError('Le montant doit être positif', 400);
+    if (!['credit', 'debit'].includes(type)) throw appError('Invalid type: use "credit" or "debit"', 400);
+    if (!reason || !reason.trim())           throw appError('Reason is required', 400);
+    if (amount <= 0)                          throw appError('Amount must be positive', 400);
 
     if (type === 'debit') {
       const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-      if (Number(user.balance) < amount) throw appError('Solde insuffisant pour ce débit', 400);
+      if (Number(user.balance) < amount) throw appError('Insufficient balance for this debit', 400);
     }
 
     const signedAmount = type === 'credit' ? amount : -amount;

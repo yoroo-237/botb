@@ -26,9 +26,9 @@ export const adminProductsController = {
 
   async create(req, res) {
     const { name, slug, price, description, stock, categoryId, brandId, images = [] } = req.body;
-    if (!name?.trim()) throw appError('name requis', 400);
-    if (!slug?.trim()) throw appError('slug requis', 400);
-    if (!price)        throw appError('price requis', 400);
+    if (!name?.trim()) throw appError('name is required', 400);
+    if (!slug?.trim()) throw appError('slug is required', 400);
+    if (!price)        throw appError('price is required', 400);
 
     const product = await prisma.product.create({
       data: {
@@ -66,7 +66,7 @@ export const adminProductsController = {
   async remove(req, res) {
     const id = parseInt(req.params.id, 10);
     await prisma.product.update({ where: { id }, data: { isActive: false } });
-    res.json(ok({ message: 'Produit désactivé' }));
+    res.json(ok({ message: 'Product deactivated' }));
   },
 
   // ─── Images ─────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export const adminProductsController = {
   async addImage(req, res) {
     const productId = parseInt(req.params.id, 10);
     const { url, thumbnail, position = 0 } = req.body;
-    if (!url) throw appError('url requise', 400);
+    if (!url) throw appError('url is required', 400);
     const img = await prisma.productImage.create({ data: { productId, url, thumbnail: thumbnail || null, position: parseInt(position, 10) } });
     res.status(201).json(ok(img));
   },

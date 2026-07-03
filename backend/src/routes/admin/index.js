@@ -14,7 +14,7 @@ import contentRoutes      from './content.routes.js';
 
 const r = Router();
 
-// Toutes les routes admin nécessitent auth + rôle moderator/admin
+// All admin routes require auth + moderator/admin role
 r.use(requireAuth, requireModerator);
 
 r.use('/dashboard',    dashboardRoutes);

@@ -18,13 +18,13 @@ r.post('/eth/sweep', requireAdmin, adminSettingsController.sweepEth);
 // ─── System Status ────────────────────────────────────────────────────────────
 r.get('/system-status', adminSettingsController.getSystemStatus);
 
-// ─── Catégories ───────────────────────────────────────────────────────────────
+// ─── Categories ───────────────────────────────────────────────────────────────
 r.get('/categories',        categoriesController.list);
 r.post('/categories',       categoriesController.create);
 r.put('/categories/:id',    categoriesController.update);
 r.delete('/categories/:id', categoriesController.remove);
 
-// ─── Marques ─────────────────────────────────────────────────────────────────
+// ─── Brands ──────────────────────────────────────────────────────────────────
 r.get('/brands',        brandsController.list);
 r.post('/brands',       brandsController.create);
 r.put('/brands/:id',    brandsController.update);

@@ -19,7 +19,7 @@ export const cryptoService = {
       case 'XMR':
         return this._xmr();
       default:
-        throw appError(`Devise non supportée: ${currency}`, 400);
+        throw appError(`Unsupported currency: ${currency}`, 400);
     }
   },
 
@@ -29,8 +29,8 @@ export const cryptoService = {
     const setting     = await prisma.siteSetting.findUnique({ where: { key: settingKey } });
     const destination = setting?.value;
 
-    if (!destination) throw appError(`Adresse destination ${settingKey} non configurée dans les settings admin`, 500);
-    if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN non configuré', 500);
+    if (!destination) throw appError(`Destination address ${settingKey} not configured in admin settings`, 500);
+    if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
 
     const callbackUrl = `${env.publicUrl}/api/webhooks/blockcypher`;
     const url = `https://api.blockcypher.com/v1/${chain}/forwards?token=${env.blockcypherToken}`;
@@ -44,12 +44,11 @@ export const cryptoService = {
   },
 
   async _alchemy(depositId) {
-    if (!env.ethHdSeed) throw appError('ETH_HD_SEED non configuré', 500);
+    if (!env.ethHdSeed) throw appError('ETH_HD_SEED not configured', 500);
 
     const wallet  = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${depositId}`);
     const address = wallet.address;
 
-    // Enregistre l'adresse dans le webhook Alchemy si configuré
     if (env.alchemy.webhookId && env.alchemy.authToken) {
       await axios.patch(
         'https://dashboard.alchemy.com/api/update-webhook-addresses',
@@ -59,7 +58,7 @@ export const cryptoService = {
           addresses_to_remove: [],
         },
         { headers: { 'X-Alchemy-Token': env.alchemy.authToken } },
-      ).catch(err => console.warn('[Alchemy] Échec mise à jour webhook:', err.message));
+      ).catch(err => console.warn('[Alchemy] Failed to update webhook:', err.message));
     }
 
     return { address, ethIndex: depositId };
@@ -68,13 +67,12 @@ export const cryptoService = {
   async _xmr() {
     const setting = await prisma.siteSetting.findUnique({ where: { key: 'xmr_address' } });
     const address = setting?.value || env.xmrAddress;
-    if (!address) throw appError('Adresse XMR non configurée (Admin → Settings → Crypto)', 500);
+    if (!address) throw appError('XMR address not configured (Admin → Settings → Crypto)', 500);
     return { address };
   },
 
-  // Récupère l'ETH de toutes les adresses de dépôt confirmées et les transfère
   async sweepEth(destinationAddress) {
-    if (!env.ethHdSeed) throw appError('ETH_HD_SEED non configuré', 500);
+    if (!env.ethHdSeed) throw appError('ETH_HD_SEED not configured', 500);
 
     const deposits = await prisma.deposit.findMany({
       where: { currency: 'ETH', status: 'confirmed', ethIndex: { not: null } },
@@ -89,7 +87,7 @@ export const cryptoService = {
         depositId: dep.id,
         address:   wallet.address,
         status:    'swept',
-        note:      'Sweep nécessite un provider ETH configuré pour signer les tx',
+        note:      'Sweep requires a configured ETH provider to sign transactions',
       });
     }
     return results;

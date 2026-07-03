@@ -4,7 +4,7 @@ const required = ['DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
 
 for (const key of required) {
   if (!process.env[key]) {
-    throw new Error(`Variable d'environnement manquante: ${key}`);
+    throw new Error(`Missing environment variable: ${key}`);
   }
 }
 

@@ -47,7 +47,7 @@ export const adminOrdersController = {
   async updateStatus(req, res) {
     const { status } = req.body;
     if (!VALID_STATUSES.includes(status)) {
-      throw appError(`Statut invalide. Valeurs: ${VALID_STATUSES.join(', ')}`, 400);
+      throw appError(`Invalid status. Valid values: ${VALID_STATUSES.join(', ')}`, 400);
     }
     const order = await prisma.order.update({
       where: { id: parseInt(req.params.id, 10) },
@@ -58,7 +58,7 @@ export const adminOrdersController = {
 
   async updateTracking(req, res) {
     const { trackingNumber, carrier } = req.body;
-    if (!trackingNumber) throw appError('trackingNumber requis', 400);
+    if (!trackingNumber) throw appError('trackingNumber is required', 400);
     const order = await prisma.order.update({
       where: { id: parseInt(req.params.id, 10) },
       data:  { trackingNumber: trackingNumber.trim(), carrier: carrier?.trim() || null, status: 'shipped' },

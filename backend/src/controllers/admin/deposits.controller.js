@@ -29,11 +29,11 @@ export const adminDepositsController = {
     const { usdAmount, note } = req.body;
 
     if (!usdAmount || parseFloat(usdAmount) <= 0) {
-      throw appError('usdAmount doit être un nombre positif', 400);
+      throw appError('usdAmount must be a positive number', 400);
     }
 
     const txn = await walletService.confirmDeposit(id, parseFloat(usdAmount), note?.trim() || null);
-    res.json(ok({ message: 'Dépôt confirmé et solde crédité', transaction: txn }));
+    res.json(ok({ message: 'Deposit confirmed and balance credited', transaction: txn }));
   },
 
   async expire(req, res) {
@@ -41,7 +41,7 @@ export const adminDepositsController = {
     const deposit = await prisma.deposit.findUniqueOrThrow({ where: { id } });
 
     if (deposit.status === 'confirmed') {
-      throw appError('Impossible d\'expirer un dépôt déjà confirmé', 409);
+      throw appError('Cannot expire an already confirmed deposit', 409);
     }
 
     const updated = await prisma.deposit.update({

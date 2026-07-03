@@ -19,7 +19,7 @@ export const adminSettingsController = {
 
   async update(req, res) {
     const entries = Object.entries(req.body).filter(([k]) => ALLOWED_KEYS.has(k));
-    if (entries.length === 0) throw appError('Aucune clé valide à mettre à jour', 400);
+    if (entries.length === 0) throw appError('No valid keys to update', 400);
 
     await Promise.all(entries.map(([key, value]) =>
       prisma.siteSetting.upsert({
@@ -34,7 +34,7 @@ export const adminSettingsController = {
 
   async sweepEth(req, res) {
     const setting = await prisma.siteSetting.findUnique({ where: { key: 'eth_address' } });
-    if (!setting?.value?.trim()) throw appError('Adresse ETH destination non configurée (Admin → Settings → Crypto)', 400);
+    if (!setting?.value?.trim()) throw appError('ETH destination address not configured (Admin → Settings → Crypto)', 400);
 
     const results = await cryptoService.sweepEth(setting.value.trim());
     res.json(ok({ swept: results.length, details: results }));

@@ -2,7 +2,7 @@ import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
 
-// ─── Catégories ───────────────────────────────────────────────────────────────
+// ─── Categories ───────────────────────────────────────────────────────────────
 
 export const categoriesController = {
   async list(req, res) {
@@ -15,8 +15,8 @@ export const categoriesController = {
 
   async create(req, res) {
     const { name, slug, parentId } = req.body;
-    if (!name?.trim()) throw appError('name requis', 400);
-    if (!slug?.trim()) throw appError('slug requis', 400);
+    if (!name?.trim()) throw appError('name is required', 400);
+    if (!slug?.trim()) throw appError('slug is required', 400);
     const cat = await prisma.category.create({
       data: { name: name.trim(), slug: slug.trim().toLowerCase(), parentId: parentId ? parseInt(parentId, 10) : null },
     });
@@ -39,7 +39,7 @@ export const categoriesController = {
   },
 };
 
-// ─── Marques ─────────────────────────────────────────────────────────────────
+// ─── Brands ──────────────────────────────────────────────────────────────────
 
 export const brandsController = {
   async list(req, res) {
@@ -52,8 +52,8 @@ export const brandsController = {
 
   async create(req, res) {
     const { name, slug, logoUrl } = req.body;
-    if (!name?.trim()) throw appError('name requis', 400);
-    if (!slug?.trim()) throw appError('slug requis', 400);
+    if (!name?.trim()) throw appError('name is required', 400);
+    if (!slug?.trim()) throw appError('slug is required', 400);
     const brand = await prisma.brand.create({
       data: { name: name.trim(), slug: slug.trim().toLowerCase(), logoUrl: logoUrl || null },
     });
@@ -86,9 +86,9 @@ export const newsController = {
 
   async create(req, res) {
     const { title, slug, content, imageUrl, isPublished = false } = req.body;
-    if (!title?.trim())   throw appError('title requis', 400);
-    if (!slug?.trim())    throw appError('slug requis', 400);
-    if (!content?.trim()) throw appError('content requis', 400);
+    if (!title?.trim())   throw appError('title is required', 400);
+    if (!slug?.trim())    throw appError('slug is required', 400);
+    if (!content?.trim()) throw appError('content is required', 400);
     const article = await prisma.newsArticle.create({
       data: {
         title: title.trim(), slug: slug.trim(), content: content.trim(),
@@ -130,8 +130,8 @@ export const faqController = {
 
   async create(req, res) {
     const { question, answer, category, position = 0, isActive = true } = req.body;
-    if (!question?.trim()) throw appError('question requise', 400);
-    if (!answer?.trim())   throw appError('answer requis', 400);
+    if (!question?.trim()) throw appError('question is required', 400);
+    if (!answer?.trim())   throw appError('answer is required', 400);
     const faq = await prisma.fAQ.create({
       data: { question: question.trim(), answer: answer.trim(), category: category || null, position: parseInt(position, 10), isActive: Boolean(isActive) },
     });
@@ -166,9 +166,9 @@ export const giveawaysController = {
 
   async create(req, res) {
     const { title, description, prize, imageUrl, status = 'draft', endsAt } = req.body;
-    if (!title?.trim())       throw appError('title requis', 400);
-    if (!description?.trim()) throw appError('description requise', 400);
-    if (!prize?.trim())       throw appError('prize requis', 400);
+    if (!title?.trim())       throw appError('title is required', 400);
+    if (!description?.trim()) throw appError('description is required', 400);
+    if (!prize?.trim())       throw appError('prize is required', 400);
     const giveaway = await prisma.giveaway.create({
       data: { title: title.trim(), description: description.trim(), prize: prize.trim(), imageUrl: imageUrl || null, status, endsAt: endsAt ? new Date(endsAt) : null },
     });

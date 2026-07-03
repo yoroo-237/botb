@@ -16,7 +16,7 @@ const fileFilter = (req, file, cb) => {
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Format de fichier non supporté (jpg, png, webp, gif uniquement)'));
+    cb(new Error('Unsupported file format (jpg, png, webp, gif only)'));
   }
 };
 

@@ -30,7 +30,6 @@ export const apikeyController = {
       },
     });
 
-    // Clé complète retournée UNE SEULE FOIS — jamais accessible ensuite
     res.status(201).json(ok({
       id:        apiKey.id,
       key:       rawKey,
@@ -43,7 +42,7 @@ export const apikeyController = {
   async revoke(req, res) {
     const id = parseInt(req.params.id, 10);
     const key = await prisma.apiKey.findFirst({ where: { id, userId: req.user.sub } });
-    if (!key) throw appError('Clé API introuvable', 404);
+    if (!key) throw appError('API key not found', 404);
 
     await prisma.apiKey.update({ where: { id }, data: { isActive: false } });
     res.json(ok({ revoked: true }));

@@ -5,37 +5,33 @@ import { ok } from '../utils/response.js';
 import { env } from '../config/env.js';
 
 export const webhookController = {
-  // Webhook BlockCypher — BTC, LTC, DOGE
+  // BlockCypher webhook — BTC, LTC, DOGE
   async blockcypher(req, res) {
     const body = req.body;
+    const { address, confirmations } = body;
 
-    // BlockCypher envoie plusieurs événements — on ne traite que les confirmations
-    const { address, confirmations, outputs } = body;
-
-    if (!address) return res.json(ok('Pas d\'adresse dans le payload'));
-    if ((confirmations || 0) < 1) return res.json(ok('En attente de confirmation'));
+    if (!address) return res.json(ok('No address in payload'));
+    if ((confirmations || 0) < 1) return res.json(ok('Awaiting confirmation'));
 
     const deposit = await prisma.deposit.findFirst({
       where: { address, status: { in: ['awaiting', 'partial'] } },
     });
 
-    if (!deposit) return res.json(ok('Dépôt non trouvé pour cette adresse'));
+    if (!deposit) return res.json(ok('No deposit found for this address'));
 
-    // BlockCypher ne donne pas directement le montant USD
-    // L'admin confirme manuellement le montant USD via /api/admin/deposits/:id/confirm
-    // On marque juste le dépôt comme "partial" pour signaler la réception
+    // BlockCypher does not provide USD amount directly.
+    // Admin must confirm the USD amount manually via /api/admin/deposits/:id/confirm.
     await prisma.deposit.update({
       where: { id: deposit.id },
       data:  { status: 'partial' },
     });
 
-    console.log(`[Webhook BlockCypher] Fonds reçus sur ${address} — dépôt #${deposit.id} → partial`);
-    res.json(ok('Réception enregistrée, confirmation manuelle requise pour le montant USD'));
+    console.log(`[Webhook BlockCypher] Funds received on ${address} — deposit #${deposit.id} → partial`);
+    res.json(ok('Receipt recorded, manual USD confirmation required'));
   },
 
-  // Webhook Alchemy — ETH
+  // Alchemy webhook — ETH
   async alchemy(req, res) {
-    // Vérification de la signature Alchemy
     const sigHeader = req.headers['x-alchemy-signature'];
     if (env.alchemy.signingKey && sigHeader) {
       const hmac     = crypto.createHmac('sha256', env.alchemy.signingKey);
@@ -43,8 +39,8 @@ export const webhookController = {
       hmac.update(rawBody);
       const expected = hmac.digest('hex');
       if (sigHeader !== expected) {
-        console.warn('[Webhook Alchemy] Signature invalide');
-        return res.status(401).json({ error: 'Signature invalide' });
+        console.warn('[Webhook Alchemy] Invalid signature');
+        return res.status(401).json({ error: 'Invalid signature' });
       }
     }
 
@@ -52,7 +48,7 @@ export const webhookController = {
     try {
       body = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
     } catch {
-      return res.status(400).json({ error: 'Payload invalide' });
+      return res.status(400).json({ error: 'Invalid payload' });
     }
 
     const activities = body?.event?.activity || [];
@@ -67,16 +63,15 @@ export const webhookController = {
 
       if (!deposit) continue;
 
-      // Alchemy fournit la valeur USD si disponible
       const usdValue = parseFloat(transfer.value || 0);
       if (usdValue > 0) {
-        await walletService.confirmDeposit(deposit.id, usdValue, `Auto-confirmé ETH via Alchemy`);
-        console.log(`[Webhook Alchemy] Dépôt #${deposit.id} confirmé: $${usdValue}`);
+        await walletService.confirmDeposit(deposit.id, usdValue, `Auto-confirmed ETH via Alchemy`);
+        console.log(`[Webhook Alchemy] Deposit #${deposit.id} confirmed: $${usdValue}`);
       } else {
         await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial' } });
       }
     }
 
-    res.json(ok('Traité'));
+    res.json(ok('Processed'));
   },
 };

@@ -18,7 +18,6 @@ export const authController = {
   },
 
   async logout(req, res) {
-    // JWT stateless — le client supprime ses tokens en localStorage
-    res.json(ok({ message: 'Déconnecté avec succès' }));
+    res.json(ok({ message: 'Logged out successfully' }));
   },
 };
