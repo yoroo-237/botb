@@ -220,17 +220,30 @@
   margin: 0 0 12px;
 }
 
-.telegramBtn {
+.contactBtns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.telegramBtn,
+.signalBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #229ed9;
   color: #fff;
   text-decoration: none;
   padding: 10px 18px;
   border-radius: 10px;
   font-size: var(--font-size-small);
   font-weight: 700;
-  transition: background 0.18s;
+  transition: background 0.18s, transform 0.1s;
 }
+.telegramBtn:active,
+.signalBtn:active { transform: scale(0.98); }
+
+.telegramBtn { background: #229ed9; }
 .telegramBtn:hover { background: #1a8bbf; text-decoration: none; }
+
+.signalBtn { background: #3a76f0; }
+.signalBtn:hover { background: #2c5fd4; text-decoration: none; }

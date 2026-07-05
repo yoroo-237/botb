@@ -56,7 +56,7 @@ export default function SupportPage() {
 
             {/* Admin-only button */}
             {isAdmin && (
-              <Link to="/mario-dashboard/support" className={styles.adminBtn}>
+              <Link to="/duc-dashboard/support" className={styles.adminBtn}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                   <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
@@ -155,18 +155,31 @@ export default function SupportPage() {
               </ol>
 
               <div className={styles.telegramBox}>
-                <p>For urgent matters, reach us directly on Telegram:</p>
-                <a
-                  href="https://t.me/BESTOFTHEBAYOG"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={styles.telegramBtn}
-                >
-                  <svg width="18" height="18" viewBox="0 0 128 128" aria-hidden="true">
-                    <path fill="currentColor" d="M28.97 63.32C47.63 55.2 60.07 49.84 66.29 47.25c17.77-7.39 21.47-8.68 23.87-8.72.53-.01 1.71.12 2.48.74.67.52.85 1.23.94 1.73.09.5.19 1.63.1 2.52-0.96 10.12-5.13 34.68-7.25 46.01-.9 4.8-2.66 6.4-4.37 6.56-3.72.34-6.54-2.46-10.14-4.82-5.63-3.69-8.81-5.99-14.28-9.59-6.32-4.16-2.22-6.45 1.38-10.19.95-.98 17.32-15.88 17.64-17.23.04-.17.07-.81-.3-1.14-.37-.33-.93-.22-1.33-.12-.56.13-9.56 6.07-26.99 17.84-2.55 1.75-4.86 2.61-6.93 2.56-2.28-.05-6.68-1.29-9.95-2.35-4.01-1.3-7.19-1.99-6.91-4.2.14-1.15 1.73-2.33 4.76-3.53z"/>
-                  </svg>
-                  Contact on Telegram
-                </a>
+                <p>For urgent matters, reach us directly:</p>
+                <div className={styles.contactBtns}>
+                  <a
+                    href="https://t.me/BESTOFTHEBAYOGDM"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.telegramBtn}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 128 128" aria-hidden="true">
+                      <path fill="currentColor" d="M28.97 63.32C47.63 55.2 60.07 49.84 66.29 47.25c17.77-7.39 21.47-8.68 23.87-8.72.53-.01 1.71.12 2.48.74.67.52.85 1.23.94 1.73.09.5.19 1.63.1 2.52-0.96 10.12-5.13 34.68-7.25 46.01-.9 4.8-2.66 6.4-4.37 6.56-3.72.34-6.54-2.46-10.14-4.82-5.63-3.69-8.81-5.99-14.28-9.59-6.32-4.16-2.22-6.45 1.38-10.19.95-.98 17.32-15.88 17.64-17.23.04-.17.07-.81-.3-1.14-.37-.33-.93-.22-1.33-.12-.56.13-9.56 6.07-26.99 17.84-2.55 1.75-4.86 2.61-6.93 2.56-2.28-.05-6.68-1.29-9.95-2.35-4.01-1.3-7.19-1.99-6.91-4.2.14-1.15 1.73-2.33 4.76-3.53z"/>
+                    </svg>
+                    Telegram
+                  </a>
+                  <a
+                    href="https://signal.me/#eu/GvtI_xbtlVnWQt5Edv6s9dZpfzwKKg3DBrB75lAg0cm77xCeHOlAqI8hBcjaO9pj"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.signalBtn}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                      <path d="M12 1.5C6.201 1.5 1.5 5.696 1.5 10.875c0 2.788 1.397 5.284 3.594 6.987L3.75 22.5l5.484-2.447A11.45 11.45 0 0 0 12 20.25c5.799 0 10.5-4.196 10.5-9.375S17.799 1.5 12 1.5z"/>
+                    </svg>
+                    Signal
+                  </a>
+                </div>
               </div>
             </div>
           </div>
