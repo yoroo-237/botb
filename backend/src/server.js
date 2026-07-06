@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import router from './routes/index.js';
+import { startDepositCleanupJob } from './jobs/depositCleanup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,7 @@ app.use(errorHandler);
 
 app.listen(env.port, () => {
   console.log(`BOTB backend running on port ${env.port} [${env.nodeEnv}]`);
+  startDepositCleanupJob();
 });
 
 export default app;
