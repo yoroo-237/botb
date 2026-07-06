@@ -163,7 +163,7 @@ export default function AdminDashboard() {
                 <tr><td colSpan={4} className="admin-table-empty">No data found.</td></tr>
               ) : recentOrders.map(o => (
                 <tr key={o.id}>
-                  <td><span className="admin-code">#{o.orderNumber || o.id?.slice(0, 8)}</span></td>
+                  <td><span className="admin-code">#{o.orderNumber || o.id}</span></td>
                   <td>{o.user?.username || o.customerName || '—'}</td>
                   <td>${Number(o.total || 0).toFixed(2)}</td>
                   <td><StatusBadge type="status" value={o.status} /></td>
