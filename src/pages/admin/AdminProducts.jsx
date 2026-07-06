@@ -303,6 +303,9 @@ function ProductModal({ product, onClose, onSaved, categories }) {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(isEdit)
   const [error, setError]     = useState('')
+  const [createdId, setCreatedId] = useState(null)
+
+  const effectiveId = product?.id || createdId
 
   // Fetch full product (with all images) when editing
   useEffect(() => {
@@ -338,8 +341,9 @@ function ProductModal({ product, onClose, onSaved, categories }) {
   }, [isEdit, product?.id])
 
   async function refreshImages() {
+    if (!effectiveId) return
     try {
-      const data = await adminFetch(`/admin/products/${product.id}`)
+      const data = await adminFetch(`/admin/products/${effectiveId}`)
       setImages(data.images || [])
     } catch {}
   }
@@ -371,9 +375,8 @@ function ProductModal({ product, onClose, onSaved, categories }) {
       } else {
         const created = await adminFetch(`/admin/products`, { method: 'POST', body: JSON.stringify(body) })
         onSaved()
-        // Switch to edit mode on the newly created product so user can add media
-        // We close create and let the list refresh show the product
-        onClose()
+        setCreatedId(created.id)
+        setTab('media')
       }
     } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
@@ -396,8 +399,8 @@ function ProductModal({ product, onClose, onSaved, categories }) {
           >×</button>
         </div>
 
-        {/* Tabs (edit only) */}
-        {isEdit && (
+        {/* Tabs (edit or just created) */}
+        {(isEdit || createdId) && (
           <div style={{ display: 'flex', padding: '12px 22px 0', borderBottom: '1px solid #e8ecf0', gap: '2px' }}>
             {[
               { key: 'info',  label: 'Product Info' },
@@ -531,7 +534,7 @@ function ProductModal({ product, onClose, onSaved, categories }) {
               </div>
             </form>
           ) : (
-            <MediaManager productId={product.id} images={images} onUpdated={refreshImages} />
+            <MediaManager productId={effectiveId} images={images} onUpdated={refreshImages} />
           )}
         </div>
       </div>
