@@ -119,7 +119,22 @@ export const adminUsersController = {
 
   async remove(req, res) {
     const id = parseInt(req.params.id, 10);
-    await prisma.user.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // Nullify Deposit→Transaction FK before deleting transactions
+      await tx.deposit.updateMany({ where: { userId: id }, data: { transactionId: null } });
+
+      await tx.ticketMessage.deleteMany({ where: { userId: id } });
+      await tx.supportTicket.deleteMany({ where: { userId: id } });
+      await tx.review.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.apiKey.deleteMany({ where: { userId: id } });
+      await tx.deposit.deleteMany({ where: { userId: id } });
+      await tx.transaction.deleteMany({ where: { userId: id } });
+      await tx.order.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+
     res.json(ok({ message: 'User deleted' }));
   },
 };
