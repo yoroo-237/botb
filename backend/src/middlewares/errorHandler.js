@@ -8,12 +8,12 @@ export function errorHandler(err, req, res, _next) {
   if (err.code === 'P2002') return res.status(409).json(fail('Value already exists'));
   if (err.code === 'P2003') return res.status(400).json(fail('Invalid reference'));
 
-  // Application errors (with .status)
-  if (err.status && err.status < 500) {
+  // Application errors (appError — intentional, always expose the message)
+  if (err.status) {
     return res.status(err.status).json(fail(err.message));
   }
 
-  // Internal error
+  // Unexpected crash — hide details in production
   const message = process.env.NODE_ENV === 'development' ? err.message : 'Internal server error';
   res.status(500).json(fail(message));
 }

@@ -44,7 +44,15 @@ export const walletService = {
       data: { userId, currency, expiresAt },
     });
 
-    const { address, hookId = null, ethIndex = null } = await cryptoService.generateAddress(currency, deposit.id);
+    let addrResult;
+    try {
+      addrResult = await cryptoService.generateAddress(currency, deposit.id);
+    } catch (err) {
+      await prisma.deposit.delete({ where: { id: deposit.id } }).catch(() => {});
+      throw err;
+    }
+
+    const { address, hookId = null, ethIndex = null } = addrResult;
 
     return prisma.deposit.update({
       where: { id: deposit.id },
