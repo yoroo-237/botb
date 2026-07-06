@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HDNodeWallet } from 'ethers';
+import { HDNodeWallet, JsonRpcProvider, formatEther } from 'ethers';
 import { env } from '../config/env.js';
 import { prisma } from '../db.js';
 import { appError } from '../utils/formatters.js';
@@ -72,7 +72,12 @@ export const cryptoService = {
   },
 
   async sweepEth(destinationAddress) {
-    if (!env.ethHdSeed) throw appError('ETH_HD_SEED not configured', 500);
+    if (!env.ethHdSeed)       throw appError('ETH_HD_SEED not configured', 500);
+    if (!env.alchemy.apiKey)  throw appError('ALCHEMY_API_KEY not configured', 500);
+
+    const provider = new JsonRpcProvider(
+      `https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`
+    );
 
     const deposits = await prisma.deposit.findMany({
       where: { currency: 'ETH', status: 'confirmed', ethIndex: { not: null } },
@@ -80,16 +85,55 @@ export const cryptoService = {
 
     if (deposits.length === 0) return [];
 
+    const GAS_LIMIT = 21000n;
+    const feeData   = await provider.getFeeData();
+    const gasPrice  = feeData.gasPrice ?? feeData.maxFeePerGas;
+    if (!gasPrice) throw appError('Could not fetch gas price from Alchemy', 500);
+
     const results = [];
+
     for (const dep of deposits) {
-      const wallet = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${dep.ethIndex}`);
-      results.push({
-        depositId: dep.id,
-        address:   wallet.address,
-        status:    'swept',
-        note:      'Sweep requires a configured ETH provider to sign transactions',
-      });
+      const wallet  = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${dep.ethIndex}`)
+                                  .connect(provider);
+      const balance = await provider.getBalance(wallet.address);
+      const gasCost = GAS_LIMIT * gasPrice;
+
+      if (balance <= gasCost) {
+        results.push({
+          depositId: dep.id,
+          address:   wallet.address,
+          status:    'skipped',
+          balanceEth: formatEther(balance),
+          reason:    'Balance too low to cover gas',
+        });
+        continue;
+      }
+
+      try {
+        const tx = await wallet.sendTransaction({
+          to:       destinationAddress,
+          value:    balance - gasCost,
+          gasLimit: GAS_LIMIT,
+          gasPrice,
+        });
+
+        results.push({
+          depositId: dep.id,
+          address:   wallet.address,
+          status:    'swept',
+          txHash:    tx.hash,
+          amountEth: formatEther(balance - gasCost),
+        });
+      } catch (err) {
+        results.push({
+          depositId: dep.id,
+          address:   wallet.address,
+          status:    'error',
+          reason:    err.message,
+        });
+      }
     }
+
     return results;
   },
 };
