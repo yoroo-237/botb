@@ -159,10 +159,10 @@ export default function AdminDeposits() {
       {/* Info panels */}
       <div className="admin-grid-2" style={{ marginBottom: '20px' }}>
         <div style={{ background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '8px', padding: '14px', fontSize: '0.85rem', color: '#155724' }}>
-          <strong>⚡ Auto-confirmed currencies:</strong> BTC, LTC, DOGE, ETH — credited automatically after sufficient blockchain confirmations.
+          <strong> Auto-confirmed currencies:</strong> BTC, LTC, DOGE, ETH — credited automatically after sufficient blockchain confirmations.
         </div>
         <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '8px', padding: '14px', fontSize: '0.85rem', color: '#856404' }}>
-          <strong>👤 Manual review required:</strong> XMR deposits must be manually confirmed by an admin after verifying on the blockchain.
+          <strong> Manual review required:</strong> XMR deposits must be manually confirmed by an admin after verifying on the blockchain.
         </div>
       </div>
 

@@ -299,7 +299,7 @@ GET  /api/wallet/transactions → { transactions: [...], pagination }
    - URI scheme : `bitcoin:ADDR`, `litecoin:ADDR`, `dogecoin:ADDR`, `ethereum:ADDR`, `monero:ADDR`
    - Adresse en `<code>` + bouton copier (clipboard API)
    - Countdown timer (HH:MM:SS) jusqu'à `expiresAt` (mis à jour toutes les secondes via `setInterval`)
-   - Guide "How it works" avec badge vert `⚡ Auto-confirmed` ou orange `👤 Manual review`
+   - Guide "How it works" avec badge vert ` Auto-confirmed` ou orange ` Manual review`
    - Steps numérotés spécifiques à chaque crypto
    - Warning coloré (vert si auto, rouge si manuel)
    - Pour XMR : bouton lien vers `/support`
@@ -474,8 +474,8 @@ XMR:  bg rgba(255,102,0,.15)  color #ff6600
 
 ### Bandeau informatif (Process Reference Panel)
 2 panels côte à côte :
-- **Vert** "⚡ Auto-confirmed (BTC · LTC · DOGE · ETH)" : explication du flow webhook
-- **Orange** "👤 Manual review required (XMR)" : checklist pour confirmer un dépôt XMR
+- **Vert** " Auto-confirmed (BTC · LTC · DOGE · ETH)" : explication du flow webhook
+- **Orange** " Manual review required (XMR)" : checklist pour confirmer un dépôt XMR
 
 ### Actions par dépôt
 

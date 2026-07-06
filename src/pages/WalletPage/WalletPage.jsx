@@ -173,14 +173,14 @@ function AddFundsModal({ onClose, onSuccess }) {
               <div className={styles.howTitle}>How it works</div>
               {currency !== 'XMR' ? (
                 <>
-                  <span className={styles.autoBadge}>⚡ Auto-confirmed</span>
+                  <span className={styles.autoBadge}> Auto-confirmed</span>
                   <p style={{ margin: 0 }}>
                     Your deposit will be automatically credited after sufficient blockchain confirmations.
                   </p>
                 </>
               ) : (
                 <>
-                  <span className={styles.manualBadge}>👤 Manual review</span>
+                  <span className={styles.manualBadge}> Manual review</span>
                   <p style={{ margin: 0 }}>
                     XMR deposits require manual verification by our team.{' '}
                     <Link to="/support" className={styles.supportLink}>Contact support</Link> if you have questions.
