@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, Navigate } from 'react-router-dom'
+import { NavLink, Outlet, Navigate, Link } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 import './admin.css'
 
@@ -83,6 +83,9 @@ export default function AdminLayout() {
         </nav>
 
         <div className="admin-sidebar-footer">
+          <Link to="/" className="admin-btn" style={{ width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', marginBottom: '8px' }}>
+            ← Back to Site
+          </Link>
           <button className="admin-btn admin-btn-danger" style={{ width: '100%' }} onClick={logout}>
             Logout
           </button>
