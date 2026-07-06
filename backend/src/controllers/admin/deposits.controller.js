@@ -1,5 +1,6 @@
 import { prisma } from '../../db.js';
 import { walletService } from '../../services/wallet.service.js';
+import { cryptoService } from '../../services/crypto.service.js';
 import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { appError } from '../../utils/formatters.js';
@@ -56,6 +57,14 @@ export const adminDepositsController = {
     res.json(ok({
       message: `${result.cleaned} expired deposit(s) cleaned up and BlockCypher forwards deleted`,
       cleaned: result.cleaned,
+    }));
+  },
+
+  async purgeBlockcypher(req, res) {
+    const result = await cryptoService.purgeAllBlockcypherForwards(['BTC', 'LTC', 'DOGE']);
+    res.json(ok({
+      message: `BlockCypher purge complete: ${result.deleted} forward(s) deleted, ${result.failed} failed`,
+      ...result,
     }));
   },
 };

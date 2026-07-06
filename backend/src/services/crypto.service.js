@@ -89,6 +89,43 @@ export const cryptoService = {
     }
   },
 
+  // List all payment forwards registered on BlockCypher for a given currency
+  async listBlockcypherForwards(currency) {
+    const chain = CHAIN_MAP[currency];
+    if (!chain || !env.blockcypherToken) return [];
+    try {
+      const { data } = await axios.get(
+        `https://api.blockcypher.com/v1/${chain}/forwards?token=${env.blockcypherToken}`
+      );
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      console.warn(`[BlockCypher] Failed to list forwards for ${currency}:`, err.message);
+      return [];
+    }
+  },
+
+  // Delete ALL forwards on BlockCypher for given currencies (including orphans not in our DB)
+  async purgeAllBlockcypherForwards(currencies = ['BTC', 'LTC', 'DOGE']) {
+    const results = { deleted: 0, failed: 0 };
+    for (const currency of currencies) {
+      const chain = CHAIN_MAP[currency];
+      if (!chain || !env.blockcypherToken) continue;
+      const forwards = await this.listBlockcypherForwards(currency);
+      for (const fwd of forwards) {
+        try {
+          await axios.delete(
+            `https://api.blockcypher.com/v1/${chain}/forwards/${fwd.id}?token=${env.blockcypherToken}`
+          );
+          results.deleted++;
+        } catch (err) {
+          console.warn(`[BlockCypher] Failed to delete forward ${fwd.id}:`, err.message);
+          results.failed++;
+        }
+      }
+    }
+    return results;
+  },
+
   async sweepEth(destinationAddress) {
     if (!env.ethHdSeed)       throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey)  throw appError('ALCHEMY_API_KEY not configured', 500);

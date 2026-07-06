@@ -200,6 +200,62 @@ function CleanupModal({ onClose, onDone }) {
   )
 }
 
+function PurgeModal({ onClose, onDone }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handlePurge() {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await adminFetch('/admin/deposits/purge-blockcypher', { method: 'POST' })
+      onDone(data.message || 'Purge completed.')
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="admin-modal">
+        <button className="admin-modal-close" onClick={onClose}>×</button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="admin-modal-title" style={{ margin: 0 }}>Purge All BlockCypher Forwards</h2>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>Deletes ALL forwards, including orphans</p>
+          </div>
+        </div>
+
+        <p style={{ fontSize: '0.875rem', color: '#555', marginBottom: '16px', lineHeight: 1.5 }}>
+          This queries BlockCypher directly and deletes <strong>every</strong> registered forwarding address on your token (BTC, LTC, DOGE) — including ones not in your database. Use this to clear a full quota and resolve persistent 429 errors.
+        </p>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
+            {error}
+          </div>
+        )}
+
+        <div className="admin-modal-actions">
+          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="admin-btn admin-btn-danger" onClick={handlePurge} disabled={loading}>
+            {loading ? 'Purging…' : 'Purge All Forwards'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminDeposits() {
   const [deposits, setDeposits] = useState([])
   const [page, setPage] = useState(1)
@@ -210,7 +266,8 @@ export default function AdminDeposits() {
   const [confirmDeposit, setConfirmDeposit] = useState(null)
   const [expireDeposit, setExpireDeposit] = useState(null)
   const [showCleanup, setShowCleanup] = useState(false)
-  const [cleanupMsg, setCleanupMsg] = useState('')
+  const [showPurge, setShowPurge]     = useState(false)
+  const [cleanupMsg, setCleanupMsg]   = useState('')
 
   const fetchDeposits = useCallback(async () => {
     setLoading(true)
@@ -284,6 +341,14 @@ export default function AdminDeposits() {
           title="Delete BlockCypher forwards for all expired pending deposits"
         >
           Cleanup Expired
+        </button>
+        <button
+          className="admin-filter-btn"
+          style={{ background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }}
+          onClick={() => setShowPurge(true)}
+          title="Delete ALL BlockCypher forwards (including orphans not in DB)"
+        >
+          Purge BlockCypher
         </button>
         {cleanupMsg && (
           <span style={{ fontSize: '13px', color: '#198754', fontWeight: 500 }}>
@@ -359,6 +424,9 @@ export default function AdminDeposits() {
       )}
       {showCleanup && (
         <CleanupModal onClose={() => setShowCleanup(false)} onDone={handleCleanupDone} />
+      )}
+      {showPurge && (
+        <PurgeModal onClose={() => setShowPurge(false)} onDone={handleCleanupDone} />
       )}
     </div>
   )
