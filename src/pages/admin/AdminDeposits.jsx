@@ -83,15 +83,17 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
 
 function ExpireModal({ deposit, onClose, onExpired }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   async function handleExpire() {
     setLoading(true)
+    setError('')
     try {
       await adminFetch(`/admin/deposits/${deposit.id}/expire`, { method: 'PATCH' })
       onExpired()
       onClose()
     } catch (e) {
-      alert(e.message)
+      setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -101,12 +103,96 @@ function ExpireModal({ deposit, onClose, onExpired }) {
     <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="admin-modal">
         <button className="admin-modal-close" onClick={onClose}>×</button>
-        <h2 className="admin-modal-title">Expire Deposit</h2>
-        <p>Are you sure you want to mark this deposit as expired? This action cannot be undone.</p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="admin-modal-title" style={{ margin: 0 }}>Expire Deposit</h2>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div style={{ background: '#f8f9fa', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+          <span style={{ color: '#888' }}>Deposit ID</span>
+          <span className="admin-code">#{deposit.id}</span>
+          <span style={{ color: '#888' }}>User</span>
+          <span>{deposit.user?.username || deposit.userId}</span>
+          <span style={{ color: '#888' }}>Currency</span>
+          <span>{deposit.currency}</span>
+          <span style={{ color: '#888' }}>Expected</span>
+          <span>{deposit.expectedAmount ?? '—'}</span>
+        </div>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
+            {error}
+          </div>
+        )}
+
         <div className="admin-modal-actions">
-          <button className="admin-btn admin-btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="admin-btn admin-btn-danger" onClick={handleExpire} disabled={loading}>
-            {loading ? 'Expiring…' : 'Expire Deposit'}
+            {loading ? 'Expiring…' : 'Confirm Expire'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CleanupModal({ onClose, onDone }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleCleanup() {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await adminFetch('/admin/deposits/cleanup', { method: 'POST' })
+      onDone(data.message || 'Cleanup completed.')
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="admin-modal">
+        <button className="admin-modal-close" onClick={onClose}>×</button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fff7ed', border: '1px solid #fdba74', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="admin-modal-title" style={{ margin: 0 }}>Cleanup Expired Deposits</h2>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>BlockCypher forwards will be deleted</p>
+          </div>
+        </div>
+
+        <p style={{ fontSize: '0.875rem', color: '#555', marginBottom: '16px', lineHeight: 1.5 }}>
+          This will mark all pending expired deposits as <strong>expired</strong> and delete their associated BlockCypher forwarding addresses.
+        </p>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
+            {error}
+          </div>
+        )}
+
+        <div className="admin-modal-actions">
+          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="admin-btn admin-btn-danger" onClick={handleCleanup} disabled={loading}>
+            {loading ? 'Cleaning up…' : 'Run Cleanup'}
           </button>
         </div>
       </div>
@@ -123,7 +209,7 @@ export default function AdminDeposits() {
   const [loading, setLoading] = useState(true)
   const [confirmDeposit, setConfirmDeposit] = useState(null)
   const [expireDeposit, setExpireDeposit] = useState(null)
-  const [cleanupBusy, setCleanupBusy] = useState(false)
+  const [showCleanup, setShowCleanup] = useState(false)
   const [cleanupMsg, setCleanupMsg] = useState('')
 
   const fetchDeposits = useCallback(async () => {
@@ -144,19 +230,10 @@ export default function AdminDeposits() {
 
   useEffect(() => { fetchDeposits() }, [fetchDeposits])
 
-  async function handleCleanup() {
-    if (!confirm('Delete all expired BlockCypher forwards and mark pending deposits as expired?')) return
-    setCleanupBusy(true)
-    setCleanupMsg('')
-    try {
-      const data = await adminFetch('/admin/deposits/cleanup', { method: 'POST' })
-      setCleanupMsg(data.message)
-      fetchDeposits()
-    } catch (e) {
-      setCleanupMsg('Error: ' + e.message)
-    } finally {
-      setCleanupBusy(false)
-    }
+  function handleCleanupDone(msg) {
+    setCleanupMsg(msg)
+    fetchDeposits()
+    setTimeout(() => setCleanupMsg(''), 5000)
   }
 
   function formatDate(str) {
@@ -203,15 +280,14 @@ export default function AdminDeposits() {
         <button
           className="admin-filter-btn"
           style={{ background: '#dc3545', color: '#fff', borderColor: '#dc3545' }}
-          onClick={handleCleanup}
-          disabled={cleanupBusy}
+          onClick={() => setShowCleanup(true)}
           title="Delete BlockCypher forwards for all expired pending deposits"
         >
-          {cleanupBusy ? 'Cleaning…' : 'Cleanup Expired'}
+          Cleanup Expired
         </button>
         {cleanupMsg && (
-          <span style={{ fontSize: '13px', color: cleanupMsg.startsWith('Error') ? '#dc3545' : '#198754', fontWeight: 500 }}>
-            {cleanupMsg}
+          <span style={{ fontSize: '13px', color: '#198754', fontWeight: 500 }}>
+            ✓ {cleanupMsg}
           </span>
         )}
       </div>
@@ -280,6 +356,9 @@ export default function AdminDeposits() {
       )}
       {expireDeposit && (
         <ExpireModal deposit={expireDeposit} onClose={() => setExpireDeposit(null)} onExpired={fetchDeposits} />
+      )}
+      {showCleanup && (
+        <CleanupModal onClose={() => setShowCleanup(false)} onDone={handleCleanupDone} />
       )}
     </div>
   )
