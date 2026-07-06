@@ -35,7 +35,7 @@ function UpdateStatusModal({ order, onClose, onUpdated }) {
         <button className="admin-modal-close" onClick={onClose}>×</button>
         <h2 className="admin-modal-title">Update Order Status</h2>
         <p style={{ color: '#888', fontSize: '0.875rem', marginBottom: '16px' }}>
-          Order: <strong>#{order.orderNumber || order.id?.slice(0, 8)}</strong>
+          Order: <strong>#{order.orderNumber || order.id}</strong>
         </p>
         {error && <div style={{ color: '#dc3545', marginBottom: '12px' }}>{error}</div>}
         <form onSubmit={handleSubmit}>

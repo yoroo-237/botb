@@ -247,8 +247,8 @@ export default function AdminDeposits() {
                 <tr><td colSpan={11} className="admin-table-empty">No data found.</td></tr>
               ) : deposits.map(d => (
                 <tr key={d.id}>
-                  <td><span className="admin-code">{d.id?.slice(0, 8)}</span></td>
-                  <td>{d.user?.username || d.userId?.slice(0, 8) || '—'}</td>
+                  <td><span className="admin-code">{d.id}</span></td>
+                  <td>{d.user?.username || d.userId || '—'}</td>
                   <td><CurrencyBadge value={d.currency} /></td>
                   <td><span className="admin-code" title={d.address}>{d.address?.slice(0, 14)}…</span></td>
                   <td>{d.expectedAmount ?? '—'}</td>

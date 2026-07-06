@@ -114,8 +114,8 @@ export default function AdminTransactions() {
                 <tr><td colSpan={9} className="admin-table-empty">No data found.</td></tr>
               ) : txns.map(t => (
                 <tr key={t.id}>
-                  <td><span className="admin-code">{t.id?.slice(0, 8)}</span></td>
-                  <td>{t.user?.username || t.userId?.slice(0, 8) || '—'}</td>
+                  <td><span className="admin-code">{t.id}</span></td>
+                  <td>{t.user?.username || t.userId || '—'}</td>
                   <td><StatusBadge type="txn" value={t.type} /></td>
                   <td>
                     <span style={{ color: t.amount >= 0 ? '#28a745' : '#dc3545', fontWeight: 700 }}>
@@ -125,7 +125,7 @@ export default function AdminTransactions() {
                   <td>{t.currency || 'USD'}</td>
                   <td>{t.status || '—'}</td>
                   <td>{t.note || '—'}</td>
-                  <td>{t.relatedId ? <span className="admin-code">{t.relatedId?.slice(0, 8)}</span> : '—'}</td>
+                  <td>{t.relatedId ? <span className="admin-code">{t.relatedId}</span> : '—'}</td>
                   <td>{formatDate(t.createdAt)}</td>
                 </tr>
               ))}

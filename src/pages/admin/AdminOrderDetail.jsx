@@ -33,7 +33,7 @@ export default function AdminOrderDetail() {
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/duc-dashboard/orders')} style={{ marginBottom: '8px' }}>
             ← Back to Orders
           </button>
-          <h1 className="admin-page-title">Order #{order.orderNumber || order.id?.slice(0, 8)}</h1>
+          <h1 className="admin-page-title">Order #{order.orderNumber || order.id}</h1>
           <p className="admin-page-subtitle">{formatDate(order.createdAt)}</p>
         </div>
         <StatusBadge type="status" value={order.status} />
