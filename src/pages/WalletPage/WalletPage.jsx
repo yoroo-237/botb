@@ -26,7 +26,7 @@ const TERMS = [
   'Deposit addresses are single-use. Do not reuse addresses from previous transactions.',
   'Minimum deposit amount may apply. Deposits below the minimum will not be credited.',
   'Processing times vary by cryptocurrency and network congestion.',
-  'Bitcoin, Litecoin, Dogecoin, and Ethereum deposits are auto-confirmed after sufficient confirmations.',
+  'Bitcoin, Litecoin, Dogecoin, and Ethereum deposits are credited automatically after sufficient blockchain confirmations. The USD equivalent is calculated at the live exchange rate at time of confirmation.',
   'Monero (XMR) deposits require manual review and may take longer to process.',
   'Do not send tokens or assets other than the specified cryptocurrency to these addresses.',
   'BOTB is not responsible for funds sent to incorrect addresses.',
@@ -171,19 +171,19 @@ function AddFundsModal({ onClose, onSuccess }) {
 
             <div className={styles.howItWorks}>
               <div className={styles.howTitle}>How it works</div>
-              {currency !== 'XMR' ? (
-                <>
-                  <span className={styles.autoBadge}> Auto-confirmed</span>
-                  <p style={{ margin: 0 }}>
-                    Your deposit will be automatically credited after sufficient blockchain confirmations.
-                  </p>
-                </>
-              ) : (
+              {currency === 'XMR' ? (
                 <>
                   <span className={styles.manualBadge}> Manual review</span>
                   <p style={{ margin: 0 }}>
                     XMR deposits require manual verification by our team.{' '}
                     <Link to="/support" className={styles.supportLink}>Contact support</Link> if you have questions.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <span className={styles.autoBadge}> Auto-confirmed</span>
+                  <p style={{ margin: 0 }}>
+                    Your deposit will be automatically detected on the blockchain and credited at the live {currency}/USD exchange rate after sufficient confirmations.
                   </p>
                 </>
               )}
@@ -299,7 +299,9 @@ export default function WalletPage() {
                       </td>
                       <td><strong>{d.currency}</strong></td>
                       <td>
-                        <span className={styles.code} title={d.address}>{d.address?.slice(0, 16)}…</span>
+                        <span className={styles.code} title={d.address}>
+                          {!d.address || d.address === 'pending' ? '—' : `${d.address.slice(0, 16)}…`}
+                        </span>
                       </td>
                       <td>{formatDate(d.createdAt)}</td>
                       <td>

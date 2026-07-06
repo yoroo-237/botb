@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { adminFetch } from './utils/api.js'
 
 const TABS = ['General', 'Shipping', 'Loyalty', 'Deposits', 'Crypto']
@@ -21,6 +21,7 @@ export default function AdminSettings() {
   const [error, setError] = useState('')
   const [sweepLoading, setSweepLoading] = useState(false)
   const [sweepResult, setSweepResult] = useState('')
+  const [showSeed, setShowSeed] = useState(false)
 
   useEffect(() => {
     adminFetch('/admin/settings')
@@ -189,7 +190,41 @@ export default function AdminSettings() {
 
           {tab === 'Crypto' && (
             <>
-              <h2 className="admin-card-title">Crypto Addresses</h2>
+              <h2 className="admin-card-title">HD Wallet Seed — BTC / LTC / DOGE</h2>
+              <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '0.82rem', color: '#7a5200', lineHeight: 1.5 }}>
+                <strong>Security notice:</strong> This 12-word mnemonic generates all BTC, LTC and DOGE deposit addresses. Keep it secret — anyone with access to it can sweep funds. It is stored in the database.
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-label">BTC / LTC / DOGE HD Seed (12 words)</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    className="admin-input"
+                    type={showSeed ? 'text' : 'password'}
+                    value={settings.btc_hd_seed || ''}
+                    onChange={e => setS('btc_hd_seed', e.target.value)}
+                    placeholder="word1 word2 word3 … word12"
+                    style={{ fontFamily: 'monospace', flex: 1 }}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary"
+                    onClick={() => setShowSeed(v => !v)}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {showSeed ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: '#888' }}>
+                  Leave blank to use the <code>BTC_HD_SEED</code> environment variable. Addresses are derived as <code>m/44'/0'/0'/0/depositId</code> (BTC), <code>m/44'/2'/0'/0/depositId</code> (LTC), <code>m/44'/3'/0'/0/depositId</code> (DOGE).
+                </p>
+              </div>
+
+              <hr className="admin-divider" />
+              <h2 className="admin-card-title" style={{ marginTop: 0 }}>Destination Addresses</h2>
+              <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: '14px' }}>
+                Used for ETH sweep and reference. BTC/LTC/DOGE deposits arrive directly at the derived HD address — transfer them manually to your main wallet using the same seed.
+              </p>
               {['btc', 'doge', 'ltc', 'eth', 'xmr'].map(c => (
                 <div key={c} className="admin-form-group">
                   <label className="admin-label">{c.toUpperCase()} Address</label>

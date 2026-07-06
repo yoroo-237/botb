@@ -32,5 +32,6 @@ export const env = {
     webhookId:  process.env.ALCHEMY_WEBHOOK_ID || '',
   },
   ethHdSeed:   process.env.ETH_HD_SEED || '',
+  btcHdSeed:   process.env.BTC_HD_SEED || process.env.ETH_HD_SEED || '',
   xmrAddress:  process.env.XMR_ADDRESS || '',
 };

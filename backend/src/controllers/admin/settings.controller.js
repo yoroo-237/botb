@@ -8,6 +8,7 @@ const ALLOWED_KEYS = new Set([
   'shipping_cost', 'shipping_free_threshold', 'shipping_deadline_h', 'shipping_deadline_m',
   'points_rate', 'deposit_expiry_hours', 'min_deposit', 'max_deposit',
   'btc_address', 'ltc_address', 'doge_address', 'eth_address', 'xmr_address',
+  'btc_hd_seed',
 ]);
 
 export const adminSettingsController = {

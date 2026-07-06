@@ -115,7 +115,7 @@ export const walletService = {
     await Promise.allSettled(
       toExpire
         .filter(d => d.hookId && ['BTC', 'LTC', 'DOGE'].includes(d.currency))
-        .map(d => cryptoService.deleteBlockcypherForward(d.hookId, d.currency))
+        .map(d => cryptoService.deleteBlockcypherHook(d.hookId, d.currency))
     );
 
     await prisma.deposit.updateMany({
