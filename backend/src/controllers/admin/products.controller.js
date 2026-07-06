@@ -1,9 +1,8 @@
-import path from 'path';
 import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { appError } from '../../utils/formatters.js';
-import { env } from '../../config/env.js';
+import { uploadToCloudinary } from '../../middlewares/upload.js';
 
 export const adminProductsController = {
   async list(req, res) {
@@ -92,16 +91,14 @@ export const adminProductsController = {
     const productId = parseInt(req.params.id, 10);
     if (!req.file) throw appError('No file uploaded', 400);
 
-    const { mediaType = 'image' } = req.body;
     const validTypes = ['image', 'video'];
-    const type = validTypes.includes(mediaType) ? mediaType : 'image';
+    const type = validTypes.includes(req.body.mediaType) ? req.body.mediaType : 'image';
 
-    const base    = env.publicUrl || `http://localhost:${env.port}`;
-    const url     = `${base}/uploads/${req.file.filename}`;
-    const count   = await prisma.productImage.count({ where: { productId } });
+    const { url, thumbnail } = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+    const count = await prisma.productImage.count({ where: { productId } });
 
     const img = await prisma.productImage.create({
-      data: { productId, url, thumbnail: type === 'image' ? url : null, position: count, mediaType: type },
+      data: { productId, url, thumbnail, position: count, mediaType: type },
     });
     res.status(201).json(ok(img));
   },
