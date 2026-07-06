@@ -1,7 +1,9 @@
+import path from 'path';
 import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { appError } from '../../utils/formatters.js';
+import { env } from '../../config/env.js';
 
 export const adminProductsController = {
   async list(req, res) {
@@ -84,5 +86,23 @@ export const adminProductsController = {
   async removeImage(req, res) {
     await prisma.productImage.delete({ where: { id: parseInt(req.params.imgId, 10) } });
     res.json(ok({ deleted: true }));
+  },
+
+  async uploadImage(req, res) {
+    const productId = parseInt(req.params.id, 10);
+    if (!req.file) throw appError('No file uploaded', 400);
+
+    const { mediaType = 'image' } = req.body;
+    const validTypes = ['image', 'video'];
+    const type = validTypes.includes(mediaType) ? mediaType : 'image';
+
+    const base    = env.publicUrl || `http://localhost:${env.port}`;
+    const url     = `${base}/uploads/${req.file.filename}`;
+    const count   = await prisma.productImage.count({ where: { productId } });
+
+    const img = await prisma.productImage.create({
+      data: { productId, url, thumbnail: type === 'image' ? url : null, position: count, mediaType: type },
+    });
+    res.status(201).json(ok(img));
   },
 };

@@ -30,7 +30,7 @@ export default function AdminOrderDetail() {
     <div>
       <div className="admin-page-header">
         <div>
-          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/mario-dashboard/orders')} style={{ marginBottom: '8px' }}>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/duc-dashboard/orders')} style={{ marginBottom: '8px' }}>
             ← Back to Orders
           </button>
           <h1 className="admin-page-title">Order #{order.orderNumber || order.id?.slice(0, 8)}</h1>

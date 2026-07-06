@@ -10,5 +10,6 @@ r.put('/:id',                c.update);
 r.patch('/:id/ban',          c.ban);
 r.patch('/:id/password',     c.setPassword);
 r.post('/:id/wallet/adjust', c.adjustWallet);
+r.delete('/:id',             c.remove);
 
 export default r;

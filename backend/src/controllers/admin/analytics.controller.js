@@ -35,35 +35,35 @@ export const analyticsController = {
     // Charts via SQL raw pour groupBy date
     const [revenueChart, ordersChart, newUsersChart, walletFlow, topCategories] = await Promise.all([
       prisma.$queryRaw`
-        SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, ABS(SUM(amount))::float as revenue
-        FROM "Transaction" WHERE type='purchase' AND created_at >= ${since}
-        GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') ORDER BY date`,
+        SELECT TO_CHAR("createdAt", 'YYYY-MM-DD') as date, ABS(SUM(amount))::float as revenue
+        FROM "Transaction" WHERE type='purchase' AND "createdAt" >= ${since}
+        GROUP BY TO_CHAR("createdAt", 'YYYY-MM-DD') ORDER BY date`,
 
       prisma.$queryRaw`
-        SELECT TO_CHAR(placed_at, 'YYYY-MM-DD') as date, COUNT(*)::int as count
-        FROM "Order" WHERE placed_at >= ${since}
-        GROUP BY TO_CHAR(placed_at, 'YYYY-MM-DD') ORDER BY date`,
+        SELECT TO_CHAR("placedAt", 'YYYY-MM-DD') as date, COUNT(*)::int as count
+        FROM "Order" WHERE "placedAt" >= ${since}
+        GROUP BY TO_CHAR("placedAt", 'YYYY-MM-DD') ORDER BY date`,
 
       prisma.$queryRaw`
-        SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*)::int as count
-        FROM "User" WHERE created_at >= ${since}
-        GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') ORDER BY date`,
+        SELECT TO_CHAR("createdAt", 'YYYY-MM-DD') as date, COUNT(*)::int as count
+        FROM "User" WHERE "createdAt" >= ${since}
+        GROUP BY TO_CHAR("createdAt", 'YYYY-MM-DD') ORDER BY date`,
 
       prisma.$queryRaw`
-        SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+        SELECT TO_CHAR("createdAt", 'YYYY-MM-DD') as date,
                SUM(CASE WHEN type='deposit' THEN amount ELSE 0 END)::float as deposits,
                ABS(SUM(CASE WHEN type='purchase' THEN amount ELSE 0 END))::float as purchases
-        FROM "Transaction" WHERE created_at >= ${since}
-        GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') ORDER BY date`,
+        FROM "Transaction" WHERE "createdAt" >= ${since}
+        GROUP BY TO_CHAR("createdAt", 'YYYY-MM-DD') ORDER BY date`,
 
       prisma.$queryRaw`
         SELECT c.name, ABS(SUM(t.amount))::float as revenue
         FROM "Transaction" t
-        JOIN "Order" o ON t.order_id = o.id
-        JOIN "OrderItem" oi ON oi.order_id = o.id
-        JOIN "Product" p ON oi.product_id = p.id
-        JOIN "Category" c ON p.category_id = c.id
-        WHERE t.type = 'purchase' AND t.created_at >= ${since}
+        JOIN "Order" o ON t."orderId" = o.id
+        JOIN "OrderItem" oi ON oi."orderId" = o.id
+        JOIN "Product" p ON oi."productId" = p.id
+        JOIN "Category" c ON p."categoryId" = c.id
+        WHERE t.type = 'purchase' AND t."createdAt" >= ${since}
         GROUP BY c.name ORDER BY revenue DESC LIMIT 10`,
     ]);
 

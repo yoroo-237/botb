@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { adminProductsController as c } from '../../controllers/admin/products.controller.js';
+import { uploadMedia } from '../../middlewares/upload.js';
 
 const r = Router();
 
-r.get('/',                    c.list);
-r.post('/',                   c.create);
-r.get('/:id',                 async (req, res) => {
+r.get('/',    c.list);
+r.post('/',   c.create);
+
+r.get('/:id', async (req, res) => {
   const { prisma } = await import('../../db.js');
   const { ok }     = await import('../../utils/response.js');
   const product    = await prisma.product.findUniqueOrThrow({
@@ -14,9 +16,15 @@ r.get('/:id',                 async (req, res) => {
   });
   res.json(ok(product));
 });
-r.put('/:id',                 c.update);
-r.delete('/:id',              c.remove);
-r.post('/:id/images',         c.addImage);
-r.delete('/:id/images/:imgId', c.removeImage);
+
+r.put('/:id',    c.update);
+r.delete('/:id', c.remove);
+
+// Media by URL
+r.post('/:id/images',            c.addImage);
+// Media by file upload
+r.post('/:id/images/upload',     uploadMedia.single('file'), c.uploadImage);
+// Remove media
+r.delete('/:id/images/:imgId',   c.removeImage);
 
 export default r;

@@ -116,4 +116,10 @@ export const adminUsersController = {
     const user = await prisma.user.findUnique({ where: { id }, select: { balance: true } });
     res.json(ok({ transaction: txn, newBalance: Number(user.balance) }));
   },
+
+  async remove(req, res) {
+    const id = parseInt(req.params.id, 10);
+    await prisma.user.delete({ where: { id } });
+    res.json(ok({ message: 'User deleted' }));
+  },
 };

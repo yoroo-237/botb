@@ -3,31 +3,82 @@ import { adminFetch } from './utils/api.js'
 import Pagination from '../../components/admin/Pagination.jsx'
 
 const PLACEHOLDER = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp'
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 function isVideoUrl(url = '') {
   return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url)
 }
 
+async function uploadMediaFile(productId, file, mediaType) {
+  const token = localStorage.getItem('token')
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('mediaType', mediaType)
+  const res = await fetch(`${BASE}/api/admin/products/${productId}/images/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error || 'Upload failed')
+  return json.data
+}
+
 // ─── Media Manager (images + videos) ─────────────────────────────────────────
 
 function MediaManager({ productId, images, onUpdated }) {
+  const [mode, setMode]     = useState('upload') // 'upload' | 'link'
+  // Link mode state
   const [url, setUrl]       = useState('')
   const [thumb, setThumb]   = useState('')
-  const [type, setType]     = useState('image')
-  const [adding, setAdding] = useState(false)
+  const [linkType, setLinkType] = useState('image')
+  // Upload mode state
+  const [file, setFile]     = useState(null)
+  const [uploadType, setUploadType] = useState('image')
+  const [preview, setPreview] = useState(null)
+  // Shared
+  const [busy, setBusy]     = useState(false)
   const [err, setErr]       = useState('')
 
-  async function add() {
+  function handleFileChange(e) {
+    const f = e.target.files?.[0] || null
+    setFile(f)
+    setErr('')
+    if (preview) URL.revokeObjectURL(preview)
+    if (f) {
+      setPreview(URL.createObjectURL(f))
+      setUploadType(f.type.startsWith('video/') ? 'video' : 'image')
+    } else {
+      setPreview(null)
+    }
+  }
+
+  async function addByLink() {
     if (!url.trim()) return
-    setAdding(true); setErr('')
+    setBusy(true); setErr('')
     try {
       await adminFetch(`/admin/products/${productId}/images`, {
         method: 'POST',
-        body: JSON.stringify({ url: url.trim(), thumbnail: thumb.trim() || null, mediaType: type, position: images.length }),
+        body: JSON.stringify({ url: url.trim(), thumbnail: thumb.trim() || null, mediaType: linkType, position: images.length }),
       })
-      setUrl(''); setThumb(''); setType('image')
+      setUrl(''); setThumb(''); setLinkType('image')
       onUpdated()
-    } catch (e) { setErr(e.message) } finally { setAdding(false) }
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+
+  async function addByUpload() {
+    if (!file) return
+    setBusy(true); setErr('')
+    try {
+      await uploadMediaFile(productId, file, uploadType)
+      setFile(null)
+      if (preview) URL.revokeObjectURL(preview)
+      setPreview(null)
+      // reset file input
+      const input = document.getElementById('media-file-input')
+      if (input) input.value = ''
+      onUpdated()
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
 
   async function remove(imgId) {
@@ -37,6 +88,19 @@ function MediaManager({ productId, images, onUpdated }) {
       onUpdated()
     } catch (e) { alert(e.message) }
   }
+
+  const tabStyle = active => ({
+    padding: '5px 14px',
+    fontSize: '13px',
+    fontWeight: active ? 600 : 400,
+    border: '1px solid',
+    borderColor: active ? '#503AA8' : '#ced4da',
+    background: active ? '#503AA8' : '#fff',
+    color: active ? '#fff' : '#555',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  })
 
   return (
     <div>
@@ -100,44 +164,119 @@ function MediaManager({ productId, images, onUpdated }) {
 
       {/* Add form */}
       <div style={{ background: '#f8f9fa', borderRadius: '8px', padding: '14px', border: '1px solid #e8ecf0' }}>
-        <p style={{ margin: '0 0 10px', fontWeight: 600, fontSize: '13px', color: '#444' }}>Add media</p>
-
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <select
-            value={type}
-            onChange={e => setType(e.target.value)}
-            style={{ padding: '7px 8px', borderRadius: '6px', border: '1px solid #ced4da', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
-          >
-            <option value="image">🖼 Image</option>
-            <option value="video">🎬 Video</option>
-          </select>
-          <input
-            className="admin-input"
-            style={{ flex: 1, fontSize: '13px', padding: '7px 10px' }}
-            placeholder={type === 'video' ? 'Video URL (https://…mp4)' : 'Image URL (https://…)'}
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && add()}
-          />
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: '#444' }}>Add media</p>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button style={tabStyle(mode === 'upload')} onClick={() => { setMode('upload'); setErr('') }}>
+              Upload file
+            </button>
+            <button style={tabStyle(mode === 'link')} onClick={() => { setMode('link'); setErr('') }}>
+              From URL
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            className="admin-input"
-            style={{ flex: 1, fontSize: '13px', padding: '7px 10px' }}
-            placeholder={type === 'video' ? 'Poster/thumbnail URL (optional)' : 'Thumbnail URL (optional, smaller version)'}
-            value={thumb}
-            onChange={e => setThumb(e.target.value)}
-          />
-          <button
-            className="admin-btn admin-btn-primary admin-btn-sm"
-            onClick={add}
-            disabled={adding || !url.trim()}
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            {adding ? 'Adding…' : '+ Add'}
-          </button>
-        </div>
+        {mode === 'upload' ? (
+          <div>
+            {/* Drop zone / file picker */}
+            <label
+              htmlFor="media-file-input"
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                border: '2px dashed', borderColor: file ? '#503AA8' : '#ced4da',
+                borderRadius: '8px', padding: '20px 12px', cursor: 'pointer',
+                background: file ? '#f5f3ff' : '#fff', transition: 'all 0.15s',
+                marginBottom: '10px', minHeight: '90px',
+              }}
+            >
+              {preview ? (
+                uploadType === 'video' ? (
+                  <video src={preview} style={{ maxHeight: '80px', maxWidth: '100%', borderRadius: '4px' }} />
+                ) : (
+                  <img src={preview} alt="preview" style={{ maxHeight: '80px', maxWidth: '100%', borderRadius: '4px', objectFit: 'contain' }} />
+                )
+              ) : (
+                <>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="1.5" style={{ marginBottom: '6px' }}>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <span style={{ fontSize: '13px', color: '#888' }}>Click to choose a file</span>
+                  <span style={{ fontSize: '11px', color: '#bbb', marginTop: '2px' }}>jpg, png, webp, gif, mp4, webm, mov, avi</span>
+                </>
+              )}
+            </label>
+            <input
+              id="media-file-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/x-matroska"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                value={uploadType}
+                onChange={e => setUploadType(e.target.value)}
+                style={{ padding: '7px 8px', borderRadius: '6px', border: '1px solid #ced4da', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+              >
+                <option value="image">Image</option>
+                <option value="video">Video</option>
+              </select>
+              {file && (
+                <span style={{ fontSize: '12px', color: '#555', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {file.name}
+                </span>
+              )}
+              <button
+                className="admin-btn admin-btn-primary admin-btn-sm"
+                onClick={addByUpload}
+                disabled={busy || !file}
+                style={{ whiteSpace: 'nowrap', marginLeft: 'auto' }}
+              >
+                {busy ? 'Uploading…' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <select
+                value={linkType}
+                onChange={e => setLinkType(e.target.value)}
+                style={{ padding: '7px 8px', borderRadius: '6px', border: '1px solid #ced4da', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+              >
+                <option value="image">Image</option>
+                <option value="video">Video</option>
+              </select>
+              <input
+                className="admin-input"
+                style={{ flex: 1, fontSize: '13px', padding: '7px 10px' }}
+                placeholder={linkType === 'video' ? 'Video URL (https://….mp4)' : 'Image URL (https://…)'}
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addByLink()}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                className="admin-input"
+                style={{ flex: 1, fontSize: '13px', padding: '7px 10px' }}
+                placeholder={linkType === 'video' ? 'Poster/thumbnail URL (optional)' : 'Thumbnail URL (optional)'}
+                value={thumb}
+                onChange={e => setThumb(e.target.value)}
+              />
+              <button
+                className="admin-btn admin-btn-primary admin-btn-sm"
+                onClick={addByLink}
+                disabled={busy || !url.trim()}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {busy ? 'Adding…' : '+ Add'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {err && <p style={{ margin: '8px 0 0', color: '#dc3545', fontSize: '12px' }}>{err}</p>}
       </div>

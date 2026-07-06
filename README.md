@@ -417,34 +417,49 @@ All endpoints are prefixed with `/api`. Auth endpoints return `accessToken` (15m
 2. **Deploy from GitHub repo** → select `yoroo-237/botb`
 3. Set **Root Directory** to `backend`
 
-### 2. Add PostgreSQL Plugin
+### 2. Add PostgreSQL Database
 
 1. In your Railway project → **+ New** → **Database** → **PostgreSQL**
-2. `DATABASE_URL` is automatically injected into the backend service
+2. `DATABASE_URL` is automatically injected into the backend service — no need to set it manually
+3. Format (for reference / external DB): `postgresql://user:password@host:5432/dbname`
 
-### 3. Set Environment Variables
+### 3. Set Up Cloudinary (image uploads)
+
+1. Create a free account at [cloudinary.com](https://cloudinary.com)
+2. Dashboard → **API Keys** → copy your Cloud Name, API Key, and API Secret
+
+### 4. Set Environment Variables
 
 In the Railway backend service → **Variables**, add:
 
 ```
 NODE_ENV=production
-PORT=4000
-FRONTEND_URL=https://your-frontend-url.com
-JWT_SECRET=<generate: openssl rand -hex 64>
-JWT_REFRESH_SECRET=<generate: openssl rand -hex 64>
-PUBLIC_URL=https://<your-railway-backend-url>
-BLOCKCYPHER_TOKEN=<from blockcypher.com>
-ALCHEMY_API_KEY=<from dashboard.alchemy.com>
-ALCHEMY_SIGNING_KEY=<from Alchemy webhook settings>
-ALCHEMY_AUTH_TOKEN=<from Alchemy>
-ALCHEMY_WEBHOOK_ID=<from Alchemy>
-ETH_HD_SEED=<24-word BIP39 mnemonic — generate offline, keep secret>
-XMR_ADDRESS=<your XMR address>
+PORT=8080
+FRONTEND_URL=https://bestofthebay.store
+JWT_SECRET=842674ba1ccf6afc838dca80422f82c10e68cb871be5d4d1c98c867a9f6b803b7ade5067ebd8fb922c873f083b7bddcf1bda711f62b737f05a9cc27cec18c138
+JWT_REFRESH_SECRET=8702f10be6ea7d9f754c5d2dcd6f4bb921341234391fba96923ac4943b0e86168cb997b7d6221c23e11bab7439f17dc7d1c8fd95df5332866ca6a01a6fbc0cc9
+
+# Database (auto-injected by Railway PostgreSQL plugin — only set if using external DB)
+DATABASE_URL=postgresql://postgres:rAHvYJzbxSYttbnIhbWFLAFIveeDhdZp@postgres.railway.internal:5432/railway
+
+# Cloudinary (required for product image/video uploads)
+CLOUDINARY_CLOUD_NAME=dhsroj1sc
+CLOUDINARY_API_KEY=217848718263879
+CLOUDINARY_API_SECRET=X_YatNUkSGO67bP3qdZQw13Vnec
+
+PUBLIC_URL=https://api.bestofthebay.store
+BLOCKCYPHER_TOKEN=df699d0cdc764507807111a7b189b0d6
+ALCHEMY_API_KEY=1p8JDbOmGYjqSfccqN7Mp
+ALCHEMY_SIGNING_KEY=whsec_gIMQWOogvGuZnwH67G0zOkaj
+ALCHEMY_AUTH_TOKEN=alcht_RYDUHooslLc2C4ba7PdjaHm0qBp2uG
+ALCHEMY_WEBHOOK_ID=9XMtFawlcMA0CUDk5rT-vLHf-TsnzcGm
+ETH_HD_SEED=people faith major expire venue guide foster write lady bean chimney estate latin rough cousin crater still copy protect health economy thunder valid leg
+XMR_ADDRESS=47CvjAyADVmKNdBES3nKGPfSEdPdVXdGmUoQXKWWrMHC9sDiq1ebsykTAuK4VsZXQMUjxkd7sUPQJb5ETSM8UQw687prjta
 ADMIN_USERNAME=duc237
 ADMIN_PASSWORD=admin@1234
 ```
 
-### 4. Deploy
+### 5. Deploy
 
 Railway auto-deploys on every push to `main`. The Nixpacks build runs:
 1. `npm ci`
@@ -456,7 +471,7 @@ Then starts: `node src/server.js`
 
 Health check: `GET /health` → `{ "status": "ok" }`
 
-### 5. Custom Domain (optional)
+### 6. Custom Domain (optional)
 
 Railway service → **Settings** → **Domains** → generate Railway domain or add custom domain.
 

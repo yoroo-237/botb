@@ -75,7 +75,7 @@ export default function AdminSupportDetail() {
     <div>
       <div className="admin-page-header">
         <div>
-          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/mario-dashboard/support')} style={{ marginBottom: '8px' }}>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/duc-dashboard/support')} style={{ marginBottom: '8px' }}>
             ← Back to Tickets
           </button>
           <h1 className="admin-page-title">{ticket.subject}</h1>

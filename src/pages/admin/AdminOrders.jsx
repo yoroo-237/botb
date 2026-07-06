@@ -145,7 +145,7 @@ export default function AdminOrders() {
                   <td>{formatDate(o.createdAt)}</td>
                   <td>
                     <div className="admin-gap-actions">
-                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate(`/mario-dashboard/orders/${o.id}`)}>View</button>
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate(`/duc-dashboard/orders/${o.id}`)}>View</button>
                       <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => setUpdateOrder(o)}>Status</button>
                     </div>
                   </td>

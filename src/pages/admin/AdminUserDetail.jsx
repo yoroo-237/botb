@@ -28,17 +28,17 @@ export default function AdminUserDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
 
-  // Modal forms
   const [passwordForm, setPasswordForm] = useState({ password: '' })
   const [editForm, setEditForm] = useState({})
-  const [balanceForm, setBalanceForm] = useState({ amount: '', note: '' })
+  const [balanceForm, setBalanceForm] = useState({ type: 'credit', amount: '', reason: '' })
 
   const fetchUser = useCallback(async () => {
     setLoading(true)
     try {
       const data = await adminFetch(`/admin/users/${id}`)
-      setUser(data.user || data)
-      setEditForm(data.user || data)
+      const u = data.user || data
+      setUser(u)
+      setEditForm({ username: u.username, role: u.role, markupPct: u.markupPct ?? 0 })
     } catch (e) {
       setError(e.message)
     } finally {
@@ -49,6 +49,7 @@ export default function AdminUserDetail() {
   useEffect(() => { fetchUser() }, [fetchUser])
 
   async function banToggle() {
+    if (!confirm(`${user.isActive ? 'Ban' : 'Unban'} ${user.username}?`)) return
     setActionLoading(true)
     try {
       await adminFetch(`/admin/users/${id}/ban`, { method: 'PATCH' })
@@ -56,6 +57,18 @@ export default function AdminUserDetail() {
     } catch (e) {
       alert(e.message)
     } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function deleteUser() {
+    if (!confirm(`Delete ${user.username} permanently? This cannot be undone.`)) return
+    setActionLoading(true)
+    try {
+      await adminFetch(`/admin/users/${id}`, { method: 'DELETE' })
+      navigate('/duc-dashboard/users')
+    } catch (e) {
+      alert(e.message)
       setActionLoading(false)
     }
   }
@@ -94,7 +107,14 @@ export default function AdminUserDetail() {
     setActionLoading(true)
     setActionError('')
     try {
-      await adminFetch(`/admin/users/${id}/wallet/adjust`, { method: 'POST', body: JSON.stringify(balanceForm) })
+      await adminFetch(`/admin/users/${id}/wallet/adjust`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type:   balanceForm.type,
+          amount: parseFloat(balanceForm.amount),
+          reason: balanceForm.reason,
+        }),
+      })
       setModal(null)
       fetchUser()
     } catch (e) {
@@ -110,16 +130,20 @@ export default function AdminUserDetail() {
   }
 
   if (loading) return <div style={{ padding: '40px', color: '#888' }}>Loading…</div>
-  if (error) return <div style={{ color: '#dc3545', padding: '20px' }}>{error}</div>
-  if (!user) return null
+  if (error)   return <div style={{ color: '#dc3545', padding: '20px' }}>{error}</div>
+  if (!user)   return null
 
-  const ud = user.profile || user
+  const isBanned = !user.isActive
 
   return (
     <div>
       <div className="admin-page-header">
         <div>
-          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate('/mario-dashboard/users')} style={{ marginBottom: '8px' }}>
+          <button
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => navigate('/duc-dashboard/users')}
+            style={{ marginBottom: '8px' }}
+          >
             ← Back to Users
           </button>
           <h1 className="admin-page-title">{user.username}</h1>
@@ -127,24 +151,43 @@ export default function AdminUserDetail() {
             <StatusBadge type="role" value={user.role} />
             {' '}
             <StatusBadge type="tier" value={user.tier} />
+            {' '}
+            {isBanned && <span style={{ color: '#dc3545', fontWeight: 700, fontSize: '0.8rem' }}>BANNED</span>}
           </p>
         </div>
         <div className="admin-gap-actions">
-          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setModal('password'); setActionError('') }}>
+          <button
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => { setModal('password'); setActionError('') }}
+          >
             Set Password
           </button>
-          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setModal('edit'); setActionError('') }}>
+          <button
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => { setModal('edit'); setActionError('') }}
+          >
             Edit User
           </button>
-          <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => { setModal('balance'); setActionError('') }}>
+          <button
+            className="admin-btn admin-btn-primary admin-btn-sm"
+            onClick={() => { setModal('balance'); setActionError(''); setBalanceForm({ type: 'credit', amount: '', reason: '' }) }}
+          >
             Adjust Balance
           </button>
           <button
-            className={'admin-btn admin-btn-sm ' + (user.banned ? 'admin-btn-success' : 'admin-btn-danger')}
+            className={'admin-btn admin-btn-sm ' + (isBanned ? 'admin-btn-success' : 'admin-btn-danger')}
             onClick={banToggle}
             disabled={actionLoading}
           >
-            {user.banned ? 'Unban' : 'Ban'}
+            {isBanned ? 'Unban' : 'Ban'}
+          </button>
+          <button
+            className="admin-btn admin-btn-sm"
+            style={{ background: '#6c757d', color: '#fff', border: 'none' }}
+            onClick={deleteUser}
+            disabled={actionLoading}
+          >
+            Delete
           </button>
         </div>
       </div>
@@ -165,19 +208,21 @@ export default function AdminUserDetail() {
               <div className="admin-info-row"><span className="admin-info-label">Tier</span><span className="admin-info-value"><StatusBadge type="tier" value={user.tier} /></span></div>
               <div className="admin-info-row"><span className="admin-info-label">Balance</span><span className="admin-info-value">${Number(user.balance || 0).toFixed(2)}</span></div>
               <div className="admin-info-row"><span className="admin-info-label">Total Spent</span><span className="admin-info-value">${Number(user.totalSpent || 0).toFixed(2)}</span></div>
-              <div className="admin-info-row"><span className="admin-info-label">Status</span><span className="admin-info-value">{user.banned ? <span style={{ color: '#dc3545', fontWeight: 700 }}>Banned</span> : <span style={{ color: '#28a745', fontWeight: 700 }}>Active</span>}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Points</span><span className="admin-info-value">{user.points ?? 0}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Markup %</span><span className="admin-info-value">{user.markupPct ?? 0}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Status</span><span className="admin-info-value">{isBanned ? <span style={{ color: '#dc3545', fontWeight: 700 }}>Banned</span> : <span style={{ color: '#28a745', fontWeight: 700 }}>Active</span>}</span></div>
               <div className="admin-info-row"><span className="admin-info-label">Joined</span><span className="admin-info-value">{formatDate(user.createdAt)}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Last Login</span><span className="admin-info-value">{formatDate(user.lastLoginAt)}</span></div>
             </div>
           </div>
           <div className="admin-card">
             <h2 className="admin-card-title">Contact / Profile</h2>
             <div className="admin-info-list">
-              <div className="admin-info-row"><span className="admin-info-label">Telegram</span><span className="admin-info-value">{ud.telegramHandle || '—'}</span></div>
-              <div className="admin-info-row"><span className="admin-info-label">Signal</span><span className="admin-info-value">{ud.signalDetails || '—'}</span></div>
-              <div className="admin-info-row"><span className="admin-info-label">Session</span><span className="admin-info-value">{ud.sessionDetails || '—'}</span></div>
-              <div className="admin-info-row"><span className="admin-info-label">BTC Refund</span><span className="admin-info-value"><span className="admin-code">{ud.btcRefundAddress || '—'}</span></span></div>
-              <div className="admin-info-row"><span className="admin-info-label">XMR Refund</span><span className="admin-info-value"><span className="admin-code">{ud.xmrRefundAddress || '—'}</span></span></div>
-              <div className="admin-info-row"><span className="admin-info-label">Markup %</span><span className="admin-info-value">{ud.markup ?? '—'}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Telegram</span><span className="admin-info-value">{user.telegramHandle || '—'}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Signal</span><span className="admin-info-value">{user.signalDetails || '—'}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Session</span><span className="admin-info-value">{user.sessionDetails || '—'}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">BTC Refund</span><span className="admin-info-value"><span className="admin-code">{user.btcRefundAddress || '—'}</span></span></div>
+              <div className="admin-info-row"><span className="admin-info-label">XMR Refund</span><span className="admin-info-value"><span className="admin-code">{user.xmrRefundAddress || '—'}</span></span></div>
             </div>
           </div>
         </div>
@@ -186,12 +231,14 @@ export default function AdminUserDetail() {
       {tab === 'Orders' && (
         <div className="admin-card">
           <h2 className="admin-card-title">Orders</h2>
-          <TablePlaceholder cols={['Order #', 'Total', 'Status', 'Date']} rows={user.orders || []}
+          <TablePlaceholder
+            cols={['Order #', 'Total', 'Status', 'Date']}
+            rows={user.orders || []}
             renderRow={o => [
-              <span className="admin-code">#{o.orderNumber || o.id?.slice(0, 8)}</span>,
-              `$${Number(o.total || 0).toFixed(2)}`,
+              <span className="admin-code">#{o.orderNumber || o.id}</span>,
+              `$${Number(o.totalAmount || 0).toFixed(2)}`,
               <StatusBadge type="status" value={o.status} />,
-              formatDate(o.createdAt),
+              formatDate(o.placedAt),
             ]}
           />
         </div>
@@ -200,11 +247,13 @@ export default function AdminUserDetail() {
       {tab === 'Transactions' && (
         <div className="admin-card">
           <h2 className="admin-card-title">Transactions</h2>
-          <TablePlaceholder cols={['Type', 'Amount', 'Note', 'Date']} rows={user.transactions || []}
+          <TablePlaceholder
+            cols={['Type', 'Amount', 'Note', 'Date']}
+            rows={user.transactions || []}
             renderRow={t => [
               t.type,
-              <span style={{ color: t.amount >= 0 ? '#28a745' : '#dc3545', fontWeight: 700 }}>
-                {t.amount >= 0 ? '+' : ''}{Number(t.amount).toFixed(2)}
+              <span style={{ color: Number(t.amount) >= 0 ? '#28a745' : '#dc3545', fontWeight: 700 }}>
+                {Number(t.amount) >= 0 ? '+' : ''}{Number(t.amount).toFixed(2)}
               </span>,
               t.note || '—',
               formatDate(t.createdAt),
@@ -216,10 +265,13 @@ export default function AdminUserDetail() {
       {tab === 'Deposits' && (
         <div className="admin-card">
           <h2 className="admin-card-title">Deposits</h2>
-          <TablePlaceholder cols={['ID', 'Currency', 'Status', 'Date']} rows={user.deposits || []}
+          <TablePlaceholder
+            cols={['ID', 'Currency', 'USD Credited', 'Status', 'Date']}
+            rows={user.deposits || []}
             renderRow={d => [
-              <span className="admin-code">{d.id?.slice(0, 8)}</span>,
+              <span className="admin-code">#{d.id}</span>,
               d.currency,
+              `$${Number(d.usdCredited || 0).toFixed(2)}`,
               <StatusBadge type="deposit" value={d.status} />,
               formatDate(d.createdAt),
             ]}
@@ -230,7 +282,9 @@ export default function AdminUserDetail() {
       {tab === 'Tickets' && (
         <div className="admin-card">
           <h2 className="admin-card-title">Support Tickets</h2>
-          <TablePlaceholder cols={['Subject', 'Status', 'Priority', 'Date']} rows={user.tickets || []}
+          <TablePlaceholder
+            cols={['Subject', 'Status', 'Priority', 'Date']}
+            rows={user.tickets || []}
             renderRow={t => [t.subject, t.status, t.priority, formatDate(t.createdAt)]}
           />
         </div>
@@ -239,20 +293,34 @@ export default function AdminUserDetail() {
       {tab === 'API Keys' && (
         <div className="admin-card">
           <h2 className="admin-card-title">API Keys</h2>
-          <TablePlaceholder cols={['Key', 'Created', 'Last Used']} rows={user.apiKeys || []}
-            renderRow={k => [<span className="admin-code">{k.key?.slice(0, 20)}…</span>, formatDate(k.createdAt), formatDate(k.lastUsed)]}
+          <TablePlaceholder
+            cols={['Prefix', 'Label', 'Created', 'Last Used']}
+            rows={user.apiKeys || []}
+            renderRow={k => [
+              <span className="admin-code">{k.keyPrefix}</span>,
+              k.label || '—',
+              formatDate(k.createdAt),
+              formatDate(k.lastUsed),
+            ]}
           />
         </div>
       )}
 
-      {/* Modals */}
+      {/* Modal — Set Password */}
       {modal === 'password' && (
         <Modal title="Set Password" onClose={() => setModal(null)}>
           {actionError && <div style={{ color: '#dc3545', marginBottom: '12px' }}>{actionError}</div>}
           <form onSubmit={setPassword}>
             <div className="admin-form-group">
               <label className="admin-label">New Password</label>
-              <input className="admin-input" type="password" required value={passwordForm.password} onChange={e => setPasswordForm({ password: e.target.value })} />
+              <input
+                className="admin-input"
+                type="password"
+                required
+                minLength={6}
+                value={passwordForm.password}
+                onChange={e => setPasswordForm({ password: e.target.value })}
+              />
             </div>
             <div className="admin-modal-actions">
               <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setModal(null)}>Cancel</button>
@@ -264,21 +332,41 @@ export default function AdminUserDetail() {
         </Modal>
       )}
 
+      {/* Modal — Edit User */}
       {modal === 'edit' && (
         <Modal title="Edit User" onClose={() => setModal(null)}>
           {actionError && <div style={{ color: '#dc3545', marginBottom: '12px' }}>{actionError}</div>}
           <form onSubmit={editUser}>
             <div className="admin-form-group">
               <label className="admin-label">Username</label>
-              <input className="admin-input" value={editForm.username || ''} onChange={e => setEditForm(f => ({ ...f, username: e.target.value }))} />
+              <input
+                className="admin-input"
+                value={editForm.username || ''}
+                onChange={e => setEditForm(f => ({ ...f, username: e.target.value }))}
+              />
             </div>
             <div className="admin-form-group">
               <label className="admin-label">Role</label>
-              <select className="admin-select" value={editForm.role || 'user'} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}>
-                <option value="user">User</option>
+              <select
+                className="admin-select"
+                value={editForm.role || 'customer'}
+                onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
+              >
+                <option value="customer">Customer</option>
                 <option value="moderator">Moderator</option>
                 <option value="admin">Admin</option>
               </select>
+            </div>
+            <div className="admin-form-group">
+              <label className="admin-label">Markup % (prix personnalisé)</label>
+              <input
+                className="admin-input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={editForm.markupPct ?? 0}
+                onChange={e => setEditForm(f => ({ ...f, markupPct: e.target.value }))}
+              />
             </div>
             <div className="admin-modal-actions">
               <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setModal(null)}>Cancel</button>
@@ -290,17 +378,42 @@ export default function AdminUserDetail() {
         </Modal>
       )}
 
+      {/* Modal — Adjust Balance */}
       {modal === 'balance' && (
         <Modal title="Adjust Balance" onClose={() => setModal(null)}>
           {actionError && <div style={{ color: '#dc3545', marginBottom: '12px' }}>{actionError}</div>}
           <form onSubmit={adjustBalance}>
             <div className="admin-form-group">
-              <label className="admin-label">Amount (use negative to deduct)</label>
-              <input className="admin-input" type="number" step="0.01" required value={balanceForm.amount} onChange={e => setBalanceForm(f => ({ ...f, amount: e.target.value }))} />
+              <label className="admin-label">Type</label>
+              <select
+                className="admin-select"
+                value={balanceForm.type}
+                onChange={e => setBalanceForm(f => ({ ...f, type: e.target.value }))}
+              >
+                <option value="credit">Credit (add funds)</option>
+                <option value="debit">Debit (remove funds)</option>
+              </select>
             </div>
             <div className="admin-form-group">
-              <label className="admin-label">Note</label>
-              <input className="admin-input" value={balanceForm.note} onChange={e => setBalanceForm(f => ({ ...f, note: e.target.value }))} />
+              <label className="admin-label">Amount ($)</label>
+              <input
+                className="admin-input"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                value={balanceForm.amount}
+                onChange={e => setBalanceForm(f => ({ ...f, amount: e.target.value }))}
+              />
+            </div>
+            <div className="admin-form-group">
+              <label className="admin-label">Reason</label>
+              <input
+                className="admin-input"
+                required
+                value={balanceForm.reason}
+                onChange={e => setBalanceForm(f => ({ ...f, reason: e.target.value }))}
+              />
             </div>
             <div className="admin-modal-actions">
               <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setModal(null)}>Cancel</button>

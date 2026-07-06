@@ -86,7 +86,7 @@ export default function AdminSupport() {
                     <td><span className="admin-badge" style={{ background: ps.bg, color: ps.color }}>{t.priority}</span></td>
                     <td>{formatDate(t.createdAt)}</td>
                     <td>
-                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate(`/mario-dashboard/support/${t.id}`)}>
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate(`/duc-dashboard/support/${t.id}`)}>
                         View
                       </button>
                     </td>
