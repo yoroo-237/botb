@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ username: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -104,13 +105,14 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await apiFetch('/auth/register', {
+      await apiFetch('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ username: form.username, password: form.password }),
       })
-      login(data.accessToken, data.refreshToken, data.user)
-      await loadUserData()
-      navigate('/', { replace: true })
+      const registeredUsername = form.username
+      setForm({ username: registeredUsername, password: '' })
+      setTab('login')
+      setSuccess('Account created! You can now sign in.')
     } catch (err) {
       setError(err.message || 'Registration failed')
     } finally {
@@ -130,13 +132,13 @@ export default function LoginPage() {
           <div className={styles.tabs}>
             <button
               className={styles.tab + (tab === 'login' ? ' ' + styles.active : '')}
-              onClick={() => { setTab('login'); setError(''); setFieldErrors({}) }}
+              onClick={() => { setTab('login'); setError(''); setSuccess(''); setFieldErrors({}) }}
             >
               Sign In
             </button>
             <button
               className={styles.tab + (tab === 'register' ? ' ' + styles.active : '')}
-              onClick={() => { setTab('register'); setError(''); setFieldErrors({}) }}
+              onClick={() => { setTab('register'); setError(''); setSuccess(''); setFieldErrors({}) }}
             >
               Register
             </button>
@@ -147,6 +149,7 @@ export default function LoginPage() {
             onSubmit={tab === 'login' ? handleLogin : handleRegister}
             noValidate
           >
+            {success && <div className={styles.successMsg}>{success}</div>}
             {error && <div className={styles.error}>{error}</div>}
 
             <div className={styles.fieldGroup}>
@@ -197,13 +200,13 @@ export default function LoginPage() {
           <div className={styles.switch}>
             {tab === 'login' ? (
               <>Don&apos;t have an account?{' '}
-                <span className={styles.switchLink} onClick={() => { setTab('register'); setError(''); setFieldErrors({}) }}>
+                <span className={styles.switchLink} onClick={() => { setTab('register'); setError(''); setSuccess(''); setFieldErrors({}) }}>
                   Register
                 </span>
               </>
             ) : (
               <>Already have an account?{' '}
-                <span className={styles.switchLink} onClick={() => { setTab('login'); setError(''); setFieldErrors({}) }}>
+                <span className={styles.switchLink} onClick={() => { setTab('login'); setError(''); setSuccess(''); setFieldErrors({}) }}>
                   Sign In
                 </span>
               </>
