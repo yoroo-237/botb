@@ -35,12 +35,19 @@ export const cryptoService = {
     const callbackUrl = `${env.publicUrl}/api/webhooks/blockcypher`;
     const url = `https://api.blockcypher.com/v1/${chain}/forwards?token=${env.blockcypherToken}`;
 
-    const { data } = await axios.post(url, {
-      destination,
-      callback_url: callbackUrl,
-    });
-
-    return { address: data.input_address, hookId: data.id || null };
+    try {
+      const { data } = await axios.post(url, {
+        destination,
+        callback_url: callbackUrl,
+      });
+      return { address: data.input_address, hookId: data.id || null };
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 429) {
+        throw appError('Too many deposit requests. Please wait a few minutes before trying again.', 503);
+      }
+      throw appError(`Failed to generate ${currency} address. Please try again later.`, 503);
+    }
   },
 
   async _alchemy(depositId) {
