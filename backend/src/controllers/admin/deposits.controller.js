@@ -50,4 +50,12 @@ export const adminDepositsController = {
     });
     res.json(ok(updated));
   },
+
+  async cleanup(req, res) {
+    const result = await walletService.cleanupExpiredDeposits();
+    res.json(ok({
+      message: `${result.cleaned} expired deposit(s) cleaned up and BlockCypher forwards deleted`,
+      cleaned: result.cleaned,
+    }));
+  },
 };

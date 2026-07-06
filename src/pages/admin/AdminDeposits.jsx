@@ -123,6 +123,8 @@ export default function AdminDeposits() {
   const [loading, setLoading] = useState(true)
   const [confirmDeposit, setConfirmDeposit] = useState(null)
   const [expireDeposit, setExpireDeposit] = useState(null)
+  const [cleanupBusy, setCleanupBusy] = useState(false)
+  const [cleanupMsg, setCleanupMsg] = useState('')
 
   const fetchDeposits = useCallback(async () => {
     setLoading(true)
@@ -141,6 +143,21 @@ export default function AdminDeposits() {
   }, [page, status, currency])
 
   useEffect(() => { fetchDeposits() }, [fetchDeposits])
+
+  async function handleCleanup() {
+    if (!confirm('Delete all expired BlockCypher forwards and mark pending deposits as expired?')) return
+    setCleanupBusy(true)
+    setCleanupMsg('')
+    try {
+      const data = await adminFetch('/admin/deposits/cleanup', { method: 'POST' })
+      setCleanupMsg(data.message)
+      fetchDeposits()
+    } catch (e) {
+      setCleanupMsg('Error: ' + e.message)
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
 
   function formatDate(str) {
     if (!str) return '—'
@@ -183,6 +200,20 @@ export default function AdminDeposits() {
           <option value="XMR">XMR</option>
         </select>
         <button className="admin-filter-btn" onClick={fetchDeposits}>Refresh</button>
+        <button
+          className="admin-filter-btn"
+          style={{ background: '#dc3545', color: '#fff', borderColor: '#dc3545' }}
+          onClick={handleCleanup}
+          disabled={cleanupBusy}
+          title="Delete BlockCypher forwards for all expired pending deposits"
+        >
+          {cleanupBusy ? 'Cleaning…' : 'Cleanup Expired'}
+        </button>
+        {cleanupMsg && (
+          <span style={{ fontSize: '13px', color: cleanupMsg.startsWith('Error') ? '#dc3545' : '#198754', fontWeight: 500 }}>
+            {cleanupMsg}
+          </span>
+        )}
       </div>
 
       <div className="admin-card">

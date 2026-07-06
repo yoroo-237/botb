@@ -78,6 +78,17 @@ export const cryptoService = {
     return { address };
   },
 
+  async deleteBlockcypherForward(hookId, currency) {
+    const chain = CHAIN_MAP[currency];
+    if (!chain || !hookId || !env.blockcypherToken) return;
+    const url = `https://api.blockcypher.com/v1/${chain}/forwards/${hookId}?token=${env.blockcypherToken}`;
+    try {
+      await axios.delete(url);
+    } catch (err) {
+      console.warn(`[BlockCypher] Failed to delete forward ${hookId}:`, err.message);
+    }
+  },
+
   async sweepEth(destinationAddress) {
     if (!env.ethHdSeed)       throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey)  throw appError('ALCHEMY_API_KEY not configured', 500);

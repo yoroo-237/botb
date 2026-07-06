@@ -93,6 +93,31 @@ export const walletService = {
     });
   },
 
+  async cleanupExpiredDeposits() {
+    const toExpire = await prisma.deposit.findMany({
+      where: {
+        status:    { in: ['awaiting', 'partial'] },
+        expiresAt: { lt: new Date() },
+      },
+    });
+
+    if (toExpire.length === 0) return { cleaned: 0 };
+
+    // Delete BlockCypher forwards for BTC/LTC/DOGE (fire-and-forget, errors are logged internally)
+    await Promise.allSettled(
+      toExpire
+        .filter(d => d.hookId && ['BTC', 'LTC', 'DOGE'].includes(d.currency))
+        .map(d => cryptoService.deleteBlockcypherForward(d.hookId, d.currency))
+    );
+
+    await prisma.deposit.updateMany({
+      where: { id: { in: toExpire.map(d => d.id) } },
+      data:  { status: 'expired' },
+    });
+
+    return { cleaned: toExpire.length };
+  },
+
   async adjustBalance(userId, type, amount, reason) {
     if (!['credit', 'debit'].includes(type)) throw appError('Invalid type: use "credit" or "debit"', 400);
     if (!reason || !reason.trim())           throw appError('Reason is required', 400);

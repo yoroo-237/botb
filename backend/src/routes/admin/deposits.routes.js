@@ -4,6 +4,7 @@ import { adminDepositsController as c } from '../../controllers/admin/deposits.c
 const r = Router();
 
 r.get('/',               c.list);
+r.post('/cleanup',       c.cleanup);
 r.patch('/:id/confirm',  c.confirm);
 r.patch('/:id/expire',   c.expire);
 
