@@ -23,7 +23,7 @@ r.delete('/:id', c.remove);
 // Media by URL
 r.post('/:id/images',            c.addImage);
 // Media by file upload
-r.post('/:id/images/upload',     uploadMedia.single('file'), c.uploadImage);
+r.post('/:id/images/upload',     uploadMedia.array('files', 20), c.uploadImage);
 // Remove media
 r.delete('/:id/images/:imgId',   c.removeImage);
 

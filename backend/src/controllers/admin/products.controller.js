@@ -89,17 +89,22 @@ export const adminProductsController = {
 
   async uploadImage(req, res) {
     const productId = parseInt(req.params.id, 10);
-    if (!req.file) throw appError('No file uploaded', 400);
+    const files = req.files;
+    if (!files || files.length === 0) throw appError('No files uploaded', 400);
 
-    const validTypes = ['image', 'video'];
-    const type = validTypes.includes(req.body.mediaType) ? req.body.mediaType : 'image';
+    const startPosition = await prisma.productImage.count({ where: { productId } });
 
-    const { url, thumbnail } = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
-    const count = await prisma.productImage.count({ where: { productId } });
+    const imgs = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const type = file.mimetype.startsWith('video/') ? 'video' : 'image';
+      const { url, thumbnail } = await uploadToCloudinary(file.buffer, file.mimetype);
+      const img = await prisma.productImage.create({
+        data: { productId, url, thumbnail, position: startPosition + i, mediaType: type },
+      });
+      imgs.push(img);
+    }
 
-    const img = await prisma.productImage.create({
-      data: { productId, url, thumbnail, position: count, mediaType: type },
-    });
-    res.status(201).json(ok(img));
+    res.status(201).json(ok(imgs));
   },
 };

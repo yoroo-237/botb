@@ -9,11 +9,10 @@ function isVideoUrl(url = '') {
   return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url)
 }
 
-async function uploadMediaFile(productId, file, mediaType) {
+async function uploadMediaFiles(productId, files) {
   const token = localStorage.getItem('token')
   const formData = new FormData()
-  formData.append('file', file)
-  formData.append('mediaType', mediaType)
+  for (const file of files) formData.append('files', file)
   const res = await fetch(`${BASE}/api/admin/products/${productId}/images/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -33,24 +32,18 @@ function MediaManager({ productId, images, onUpdated }) {
   const [thumb, setThumb]   = useState('')
   const [linkType, setLinkType] = useState('image')
   // Upload mode state
-  const [file, setFile]     = useState(null)
-  const [uploadType, setUploadType] = useState('image')
-  const [preview, setPreview] = useState(null)
+  const [files, setFiles]   = useState([])
+  const [previews, setPreviews] = useState([])
   // Shared
   const [busy, setBusy]     = useState(false)
   const [err, setErr]       = useState('')
 
   function handleFileChange(e) {
-    const f = e.target.files?.[0] || null
-    setFile(f)
+    const selected = Array.from(e.target.files || [])
+    previews.forEach(p => URL.revokeObjectURL(p))
+    setFiles(selected)
+    setPreviews(selected.map(f => URL.createObjectURL(f)))
     setErr('')
-    if (preview) URL.revokeObjectURL(preview)
-    if (f) {
-      setPreview(URL.createObjectURL(f))
-      setUploadType(f.type.startsWith('video/') ? 'video' : 'image')
-    } else {
-      setPreview(null)
-    }
   }
 
   async function addByLink() {
@@ -67,14 +60,13 @@ function MediaManager({ productId, images, onUpdated }) {
   }
 
   async function addByUpload() {
-    if (!file) return
+    if (files.length === 0) return
     setBusy(true); setErr('')
     try {
-      await uploadMediaFile(productId, file, uploadType)
-      setFile(null)
-      if (preview) URL.revokeObjectURL(preview)
-      setPreview(null)
-      // reset file input
+      await uploadMediaFiles(productId, files)
+      previews.forEach(p => URL.revokeObjectURL(p))
+      setFiles([])
+      setPreviews([])
       const input = document.getElementById('media-file-input')
       if (input) input.value = ''
       onUpdated()
@@ -184,57 +176,53 @@ function MediaManager({ productId, images, onUpdated }) {
               htmlFor="media-file-input"
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                border: '2px dashed', borderColor: file ? '#503AA8' : '#ced4da',
-                borderRadius: '8px', padding: '20px 12px', cursor: 'pointer',
-                background: file ? '#f5f3ff' : '#fff', transition: 'all 0.15s',
+                border: '2px dashed', borderColor: files.length ? '#503AA8' : '#ced4da',
+                borderRadius: '8px', padding: '16px 12px', cursor: 'pointer',
+                background: files.length ? '#f5f3ff' : '#fff', transition: 'all 0.15s',
                 marginBottom: '10px', minHeight: '90px',
               }}
             >
-              {preview ? (
-                uploadType === 'video' ? (
-                  <video src={preview} style={{ maxHeight: '80px', maxWidth: '100%', borderRadius: '4px' }} />
-                ) : (
-                  <img src={preview} alt="preview" style={{ maxHeight: '80px', maxWidth: '100%', borderRadius: '4px', objectFit: 'contain' }} />
-                )
+              {previews.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center' }}>
+                  {previews.map((p, i) => {
+                    const isVid = files[i]?.type.startsWith('video/')
+                    return isVid ? (
+                      <video key={i} src={p} style={{ height: '60px', width: '60px', objectFit: 'cover', borderRadius: '4px', background: '#222' }} />
+                    ) : (
+                      <img key={i} src={p} alt="" style={{ height: '60px', width: '60px', objectFit: 'cover', borderRadius: '4px' }} />
+                    )
+                  })}
+                  <span style={{ width: '100%', textAlign: 'center', fontSize: '12px', color: '#503AA8', marginTop: '4px', fontWeight: 600 }}>
+                    {files.length} file{files.length > 1 ? 's' : ''} selected
+                  </span>
+                </div>
               ) : (
                 <>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="1.5" style={{ marginBottom: '6px' }}>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span style={{ fontSize: '13px', color: '#888' }}>Click to choose a file</span>
-                  <span style={{ fontSize: '11px', color: '#bbb', marginTop: '2px' }}>jpg, png, webp, gif, mp4, webm, mov, avi</span>
+                  <span style={{ fontSize: '13px', color: '#888' }}>Click to choose files</span>
+                  <span style={{ fontSize: '11px', color: '#bbb', marginTop: '2px' }}>Multiple selection allowed · jpg, png, webp, gif, mp4, webm, mov</span>
                 </>
               )}
             </label>
             <input
               id="media-file-input"
               type="file"
+              multiple
               accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/x-matroska"
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <select
-                value={uploadType}
-                onChange={e => setUploadType(e.target.value)}
-                style={{ padding: '7px 8px', borderRadius: '6px', border: '1px solid #ced4da', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
-              >
-                <option value="image">Image</option>
-                <option value="video">Video</option>
-              </select>
-              {file && (
-                <span style={{ fontSize: '12px', color: '#555', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {file.name}
-                </span>
-              )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
               <button
                 className="admin-btn admin-btn-primary admin-btn-sm"
                 onClick={addByUpload}
-                disabled={busy || !file}
-                style={{ whiteSpace: 'nowrap', marginLeft: 'auto' }}
+                disabled={busy || files.length === 0}
+                style={{ whiteSpace: 'nowrap' }}
               >
-                {busy ? 'Uploading…' : 'Upload'}
+                {busy ? 'Uploading…' : files.length > 1 ? `Upload ${files.length} files` : 'Upload'}
               </button>
             </div>
           </div>
