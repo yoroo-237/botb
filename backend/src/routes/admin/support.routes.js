@@ -3,9 +3,9 @@ import { adminSupportController as c } from '../../controllers/admin/support.con
 
 const r = Router();
 
-r.get('/',              c.list);
-r.get('/:id',           c.getOne);
-r.post('/:id/messages', c.reply);
-r.patch('/:id/status',  c.updateStatus);
+r.get('/tickets',                  c.list);
+r.get('/tickets/:id',              c.getOne);
+r.post('/tickets/:id/reply',       c.reply);
+r.patch('/tickets/:id/status',     c.updateStatus);
 
 export default r;
