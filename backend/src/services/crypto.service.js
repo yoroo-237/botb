@@ -207,6 +207,85 @@ export const cryptoService = {
     return results;
   },
 
+  async sweepBtcLike(currency, destinationAddress) {
+    const chain = CHAIN_MAP[currency];
+    if (!chain) throw appError(`Unsupported currency: ${currency}`, 400);
+    if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
+
+    const dbSetting = await prisma.siteSetting.findUnique({ where: { key: 'btc_hd_seed' } });
+    const mnemonic  = dbSetting?.value?.trim() || env.btcHdSeed;
+    if (!mnemonic) throw appError('BTC/LTC/DOGE HD seed not configured (Admin → Settings → Crypto)', 500);
+
+    const network  = BTC_NETWORKS[currency];
+    const coinType = BIP44_COIN[currency];
+    const seed     = mnemonicToSeedSync(mnemonic);
+    const root     = bip32.fromSeed(seed, network);
+
+    const deposits = await prisma.deposit.findMany({ where: { currency } });
+    // Conservative fixed fees in satoshis/litoshis/dogoshi
+    const FIXED_FEE = { BTC: 5000, LTC: 100000, DOGE: 1000000 }[currency];
+
+    const results = [];
+
+    for (const dep of deposits) {
+      const child = root.derivePath(`m/44'/${coinType}'/0'/0/${dep.id}`);
+      const { address } = bitcoin.payments.p2pkh({ pubkey: Buffer.from(child.publicKey), network });
+
+      let utxos = [];
+      try {
+        const { data } = await axios.get(
+          `https://api.blockcypher.com/v1/${chain}/addrs/${address}?unspentOnly=true&token=${env.blockcypherToken}`
+        );
+        utxos = data.txrefs || [];
+      } catch (err) {
+        results.push({ depositId: dep.id, address, status: 'error', reason: 'UTXO fetch failed: ' + err.message });
+        continue;
+      }
+
+      if (utxos.length === 0) continue;
+
+      const totalSats = utxos.reduce((sum, u) => sum + u.value, 0);
+      const sendAmount = totalSats - FIXED_FEE;
+
+      if (sendAmount <= 0) {
+        results.push({ depositId: dep.id, address, status: 'skipped', reason: 'Balance too low to cover fee', balanceSats: totalSats });
+        continue;
+      }
+
+      try {
+        const psbt = new bitcoin.Psbt({ network });
+
+        for (const utxo of utxos) {
+          const { data: txData } = await axios.get(
+            `https://api.blockcypher.com/v1/${chain}/txs/${utxo.tx_hash}?includeHex=true&token=${env.blockcypherToken}`
+          );
+          psbt.addInput({
+            hash:           utxo.tx_hash,
+            index:          utxo.tx_output_n,
+            nonWitnessUtxo: Buffer.from(txData.hex, 'hex'),
+          });
+        }
+
+        psbt.addOutput({ address: destinationAddress, value: sendAmount });
+
+        for (let i = 0; i < utxos.length; i++) psbt.signInput(i, child);
+        psbt.finalizeAllInputs();
+
+        const txHex = psbt.extractTransaction().toHex();
+        const { data: broadcast } = await axios.post(
+          `https://api.blockcypher.com/v1/${chain}/txs/push?token=${env.blockcypherToken}`,
+          { tx: txHex }
+        );
+
+        results.push({ depositId: dep.id, address, status: 'swept', txHash: broadcast.tx?.hash, amountSats: sendAmount });
+      } catch (err) {
+        results.push({ depositId: dep.id, address, status: 'error', reason: err.message });
+      }
+    }
+
+    return results;
+  },
+
   async sweepEth(destinationAddress) {
     if (!env.ethHdSeed)      throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);

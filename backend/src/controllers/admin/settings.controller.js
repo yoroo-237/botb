@@ -41,6 +41,18 @@ export const adminSettingsController = {
     res.json(ok({ swept: results.length, details: results }));
   },
 
+  async sweepCrypto(req, res) {
+    const currency = req.params.currency?.toUpperCase();
+    if (!['BTC', 'LTC', 'DOGE'].includes(currency)) throw appError('Unsupported currency for sweep', 400);
+
+    const key = `${currency.toLowerCase()}_address`;
+    const setting = await prisma.siteSetting.findUnique({ where: { key } });
+    if (!setting?.value?.trim()) throw appError(`${currency} destination address not configured (Admin → Settings → Crypto)`, 400);
+
+    const results = await cryptoService.sweepBtcLike(currency, setting.value.trim());
+    res.json(ok({ currency, swept: results.filter(r => r.status === 'swept').length, details: results }));
+  },
+
   async getSystemStatus(req, res) {
     const checks = await Promise.allSettled([
       prisma.$queryRaw`SELECT 1`,

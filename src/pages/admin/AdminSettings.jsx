@@ -19,8 +19,8 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
-  const [sweepLoading, setSweepLoading] = useState(false)
-  const [sweepResult, setSweepResult] = useState('')
+  const [sweepLoading, setSweepLoading] = useState({})
+  const [sweepResult, setSweepResult] = useState({})
   const [showSeed, setShowSeed] = useState(false)
 
   useEffect(() => {
@@ -49,16 +49,20 @@ export default function AdminSettings() {
     }
   }
 
-  async function handleEthSweep() {
-    setSweepLoading(true)
-    setSweepResult('')
+  async function handleSweep(currency) {
+    setSweepLoading(v => ({ ...v, [currency]: true }))
+    setSweepResult(v => ({ ...v, [currency]: '' }))
     try {
-      const data = await adminFetch('/admin/eth/sweep', { method: 'POST' })
-      setSweepResult('Sweep initiated: ' + JSON.stringify(data))
+      const url = currency === 'ETH' ? '/admin/eth/sweep' : `/admin/settings/sweep/${currency.toLowerCase()}`
+      const data = await adminFetch(url, { method: 'POST' })
+      const msg = currency === 'ETH'
+        ? 'Sweep initiated: ' + JSON.stringify(data)
+        : `Swept ${data.swept ?? 0} address(es). ` + JSON.stringify(data.details ?? [])
+      setSweepResult(v => ({ ...v, [currency]: msg }))
     } catch (e) {
-      setSweepResult('Error: ' + e.message)
+      setSweepResult(v => ({ ...v, [currency]: 'Error: ' + e.message }))
     } finally {
-      setSweepLoading(false)
+      setSweepLoading(v => ({ ...v, [currency]: false }))
     }
   }
 
@@ -232,25 +236,31 @@ export default function AdminSettings() {
                 </div>
               ))}
               <hr className="admin-divider" />
-              <div>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '8px' }}>ETH Sweep</h3>
-                <p style={{ color: '#888', fontSize: '0.875rem', marginBottom: '12px' }}>
-                  Sweep all ETH from deposit addresses to the master wallet.
-                </p>
-                {sweepResult && (
-                  <div style={{ background: '#f0f4ff', border: '1px solid #c8d4ff', borderRadius: '6px', padding: '10px', marginBottom: '12px', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                    {sweepResult}
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '4px' }}>Sweep to Destination</h3>
+              <p style={{ color: '#888', fontSize: '0.875rem', marginBottom: '16px' }}>
+                Transfer funds from all deposit addresses to the destination addresses configured above.
+              </p>
+              {['BTC', 'LTC', 'DOGE', 'ETH'].map(cur => (
+                <div key={cur} style={{ marginBottom: '16px', padding: '14px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: sweepResult[cur] ? '10px' : 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{cur} Sweep</span>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-secondary"
+                      onClick={() => handleSweep(cur)}
+                      disabled={!!sweepLoading[cur]}
+                      style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                    >
+                      {sweepLoading[cur] ? 'Sweeping…' : `Run ${cur} Sweep`}
+                    </button>
                   </div>
-                )}
-                <button
-                  type="button"
-                  className="admin-btn admin-btn-secondary"
-                  onClick={handleEthSweep}
-                  disabled={sweepLoading}
-                >
-                  {sweepLoading ? 'Sweeping…' : 'Run ETH Sweep'}
-                </button>
-              </div>
+                  {sweepResult[cur] && (
+                    <div style={{ background: '#fff', border: '1px solid #c8d4ff', borderRadius: '6px', padding: '8px 10px', fontSize: '0.78rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {sweepResult[cur]}
+                    </div>
+                  )}
+                </div>
+              ))}
             </>
           )}
 

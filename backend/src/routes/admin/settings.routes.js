@@ -4,7 +4,8 @@ import { requireAdmin } from '../../middlewares/auth.js';
 
 const r = Router();
 
-r.get('/',     c.get);
-r.put('/',     requireAdmin, c.update);
+r.get('/',                        c.get);
+r.put('/',                        requireAdmin, c.update);
+r.post('/sweep/:currency',        requireAdmin, c.sweepCrypto);
 
 export default r;
