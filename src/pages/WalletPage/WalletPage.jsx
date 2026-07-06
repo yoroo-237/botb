@@ -291,7 +291,7 @@ export default function WalletPage() {
                     <tr><td colSpan={6} className={styles.empty}>No deposits found.</td></tr>
                   ) : deposits.map(d => (
                     <tr key={d.id}>
-                      <td><code className={styles.code}>{d.id?.slice(0, 8)}</code></td>
+                      <td><code className={styles.code}>#{d.id}</code></td>
                       <td>
                         <span className={styles.badge + ' ' + getStatusClass(d.status)}>
                           {d.status || 'pending'}

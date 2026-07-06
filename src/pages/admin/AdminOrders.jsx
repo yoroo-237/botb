@@ -136,7 +136,7 @@ export default function AdminOrders() {
                 <tr><td colSpan={8} className="admin-table-empty">No data found.</td></tr>
               ) : orders.map(o => (
                 <tr key={o.id}>
-                  <td><span className="admin-code">#{o.orderNumber || o.id?.slice(0, 8)}</span></td>
+                  <td><span className="admin-code">#{o.orderNumber || o.id}</span></td>
                   <td>{o.user?.username || o.name || '—'}</td>
                   <td>{o.items?.length ?? o.itemCount ?? '—'}</td>
                   <td>${Number(o.total || 0).toFixed(2)}</td>
