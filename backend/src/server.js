@@ -11,9 +11,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// CORS
+// CORS — accept both www and non-www variants of the frontend domain
+const allowedOrigins = [env.frontendUrl, env.frontendUrl?.replace('://', '://www.')].filter(Boolean);
 app.use(cors({
-  origin:      env.frontendUrl,
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
   methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
