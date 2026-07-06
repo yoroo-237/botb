@@ -501,7 +501,8 @@ export function getProduct(slug) {
 
 /** Get product thumbnail (first image 300x300) */
 export function getThumb(product) {
-  return product?.images?.[0]?.thumbnail || 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp'
+  const img = product?.images?.[0]
+  return img?.thumbnail || img?.url || img?.src || 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp'
 }
 
 /** Format price as $X,XXX.XX */
