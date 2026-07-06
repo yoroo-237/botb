@@ -82,7 +82,7 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={charts.revenueChart || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d?.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => typeof d === 'string' ? d.slice(5) : ''} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
                 <Line type="monotone" dataKey="revenue" stroke="#4361ee" strokeWidth={2} dot={false} />
@@ -133,7 +133,7 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charts.newUsersChart || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d?.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => typeof d === 'string' ? d.slice(5) : ''} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Bar dataKey="users" fill="#28a745" radius={[4, 4, 0, 0]} />

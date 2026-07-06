@@ -89,7 +89,7 @@ export default function AdminAnalytics() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d?.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => typeof d === 'string' ? d.slice(5) : ''} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
                 <Area type="monotone" dataKey="revenue" stroke="#4361ee" fill="url(#revGrad)" strokeWidth={2} />
@@ -103,7 +103,7 @@ export default function AdminAnalytics() {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charts.orders || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d?.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => typeof d === 'string' ? d.slice(5) : ''} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Bar dataKey="count" fill="#4361ee" radius={[4, 4, 0, 0]} />
@@ -117,7 +117,7 @@ export default function AdminAnalytics() {
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={charts.users || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d?.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => typeof d === 'string' ? d.slice(5) : ''} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Line type="monotone" dataKey="count" stroke="#28a745" strokeWidth={2} dot={false} />
