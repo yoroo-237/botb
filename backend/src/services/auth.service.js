@@ -27,7 +27,7 @@ export const authService = {
   async login({ username, password }) {
     if (!username || !password) throw appError('Username and password are required', 400);
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    const user = await prisma.user.findUnique({ where: { username: username.trim() } });
     if (!user)          throw appError('Invalid credentials', 401);
     if (!user.isActive) throw appError('Account disabled', 403);
 
