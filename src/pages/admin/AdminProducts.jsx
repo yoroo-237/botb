@@ -538,7 +538,9 @@ export default function AdminProducts() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
-  const [editProduct, setEditProduct] = useState(null)
+  const [editProduct, setEditProduct]   = useState(null)
+  const [deleteProduct, setDeleteProduct] = useState(null)
+  const [deleting, setDeleting]         = useState(false)
   const [showCreate, setShowCreate]   = useState(false)
   const [categories, setCategories]   = useState([])
 
@@ -562,6 +564,20 @@ export default function AdminProducts() {
   useEffect(() => {
     adminFetch('/admin/categories').then(d => setCategories(d || [])).catch(() => {})
   }, [])
+
+  async function handleDelete() {
+    if (!deleteProduct) return
+    setDeleting(true)
+    try {
+      await adminFetch(`/admin/products/${deleteProduct.id}`, { method: 'DELETE' })
+      setDeleteProduct(null)
+      fetchProducts()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   function handleSearch(v) {
     setSearch(v)
@@ -670,12 +686,20 @@ export default function AdminProducts() {
                     </td>
 
                     <td>
-                      <button
-                        className="admin-btn admin-btn-secondary admin-btn-sm"
-                        onClick={() => setEditProduct(p)}
-                      >
-                        Edit
-                      </button>
+                      <div className="admin-gap-actions">
+                        <button
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={() => setEditProduct(p)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="admin-btn admin-btn-danger admin-btn-sm"
+                          onClick={() => setDeleteProduct(p)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -685,6 +709,33 @@ export default function AdminProducts() {
         </div>
         <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       </div>
+
+      {deleteProduct && (
+        <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteProduct(null)}>
+          <div className="admin-modal" style={{ maxWidth: '420px' }}>
+            <button className="admin-modal-close" onClick={() => setDeleteProduct(null)}>×</button>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="admin-modal-title" style={{ margin: '0 0 4px' }}>Delete Product</h2>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#555' }}>
+                  Are you sure you want to delete <strong>{deleteProduct.name}</strong>? This will also remove all its media. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="admin-modal-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setDeleteProduct(null)} disabled={deleting}>Cancel</button>
+              <button className="admin-btn admin-btn-danger" onClick={handleDelete} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editProduct && (
         <ProductModal
