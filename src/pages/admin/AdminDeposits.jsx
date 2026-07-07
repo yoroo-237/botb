@@ -268,6 +268,7 @@ export default function AdminDeposits() {
   const [showCleanup, setShowCleanup] = useState(false)
   const [showPurge, setShowPurge]     = useState(false)
   const [cleanupMsg, setCleanupMsg]   = useState('')
+  const [reregisterLoading, setReregisterLoading] = useState({})
 
   const fetchDeposits = useCallback(async () => {
     setLoading(true)
@@ -291,6 +292,21 @@ export default function AdminDeposits() {
     setCleanupMsg(msg)
     fetchDeposits()
     setTimeout(() => setCleanupMsg(''), 5000)
+  }
+
+  async function handleReregisterWebhook(deposit) {
+    setReregisterLoading(v => ({ ...v, [deposit.id]: true }))
+    try {
+      const data = await adminFetch(`/admin/deposits/${deposit.id}/reregister-webhook`, { method: 'POST' })
+      setCleanupMsg(data.message || 'Webhook registered')
+      fetchDeposits()
+      setTimeout(() => setCleanupMsg(''), 6000)
+    } catch (e) {
+      setCleanupMsg('Error: ' + e.message)
+      setTimeout(() => setCleanupMsg(''), 6000)
+    } finally {
+      setReregisterLoading(v => ({ ...v, [deposit.id]: false }))
+    }
   }
 
   function formatDate(str) {
@@ -400,12 +416,23 @@ export default function AdminDeposits() {
                   <td>{formatDate(d.createdAt)}</td>
                   <td>
                     <div className="admin-gap-actions">
-                      {d.status === 'awaiting' || d.status === 'partial' ? (
+                      {(d.status === 'awaiting' || d.status === 'partial') && (
                         <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmDeposit(d)}>Confirm</button>
-                      ) : null}
-                      {d.status === 'awaiting' ? (
+                      )}
+                      {d.status === 'awaiting' && (
                         <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExpireDeposit(d)}>Expire</button>
-                      ) : null}
+                      )}
+                      {['BTC', 'LTC', 'DOGE'].includes(d.currency) && (d.status === 'awaiting' || d.status === 'partial') && (
+                        <button
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          title={d.hookId ? `Hook: ${d.hookId}` : 'No webhook registered — click to register'}
+                          style={!d.hookId ? { borderColor: '#f59e0b', color: '#b45309' } : {}}
+                          onClick={() => handleReregisterWebhook(d)}
+                          disabled={!!reregisterLoading[d.id]}
+                        >
+                          {reregisterLoading[d.id] ? '…' : d.hookId ? '↺ Hook' : '⚠ Register Hook'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

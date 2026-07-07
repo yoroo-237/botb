@@ -1,4 +1,5 @@
 import { walletService } from '../services/wallet.service.js';
+import { cryptoService } from '../services/crypto.service.js';
 import { prisma } from '../db.js';
 import { ok } from '../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../utils/pagination.js';
@@ -44,6 +45,37 @@ export const walletController = {
     }
     const deposit = await walletService.createDeposit(req.user.sub, currency.toUpperCase());
     res.status(201).json(ok(deposit));
+  },
+
+  async checkDeposit(req, res) {
+    const depositId = parseInt(req.params.id, 10);
+
+    // Load deposit — must belong to this user
+    const deposit = await prisma.deposit.findFirst({
+      where: { id: depositId, userId: req.user.sub },
+    });
+    if (!deposit) return res.status(404).json({ success: false, error: 'Deposit not found' });
+
+    // Already confirmed or expired — return as-is
+    if (!['awaiting', 'partial'].includes(deposit.status)) {
+      return res.json(ok({ deposit, blockchainResult: null }));
+    }
+
+    const result = await cryptoService.checkDepositOnChain(deposit);
+
+    if (result.confirmed) {
+      await prisma.deposit.update({ where: { id: deposit.id }, data: { amountReceived: result.cryptoAmount } });
+      await walletService.confirmDeposit(
+        deposit.id,
+        result.usdAmount,
+        `Auto-confirmed ${result.cryptoAmount} ${deposit.currency} @ $${result.usdPrice} = $${result.usdAmount}`
+      );
+    } else if (result.error === 'price_unavailable') {
+      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial' } });
+    }
+
+    const updated = await prisma.deposit.findUnique({ where: { id: deposit.id } });
+    res.json(ok({ deposit: updated, blockchainResult: result }));
   },
 
   async getTransactions(req, res) {

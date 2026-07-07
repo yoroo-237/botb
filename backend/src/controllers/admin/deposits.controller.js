@@ -67,4 +67,20 @@ export const adminDepositsController = {
       ...result,
     }));
   },
+
+  async reregisterWebhook(req, res) {
+    const id      = parseInt(req.params.id, 10);
+    const deposit = await prisma.deposit.findUniqueOrThrow({ where: { id } });
+
+    if (!['BTC', 'LTC', 'DOGE'].includes(deposit.currency)) {
+      throw appError('Webhook re-registration only applies to BTC/LTC/DOGE deposits', 400);
+    }
+    if (!deposit.address) throw appError('Deposit has no address yet', 400);
+
+    const CHAIN_MAP = { BTC: 'btc/main', LTC: 'ltc/main', DOGE: 'doge/main' };
+    const hookId = await cryptoService._registerAddressWebhook(CHAIN_MAP[deposit.currency], deposit.address);
+
+    await prisma.deposit.update({ where: { id }, data: { hookId } });
+    res.json(ok({ message: hookId ? 'Webhook registered' : 'BlockCypher registration failed (check PUBLIC_URL)', hookId }));
+  },
 };

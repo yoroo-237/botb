@@ -58,7 +58,6 @@ export const cryptoService = {
     const dbSetting = await prisma.siteSetting.findUnique({ where: { key: 'btc_hd_seed' } });
     const mnemonic  = dbSetting?.value?.trim() || env.btcHdSeed;
     if (!mnemonic) throw appError('BTC/LTC/DOGE HD seed not configured. Set it in Admin → Settings → Crypto.', 500);
-    if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
 
     const network  = BTC_NETWORKS[currency];
     const coinType = BIP44_COIN[currency];
@@ -73,8 +72,10 @@ export const cryptoService = {
       network,
     });
 
-    // Register a BlockCypher address webhook (uses webhook quota, NOT payment forward quota)
-    const hookId = await this._registerAddressWebhook(CHAIN_MAP[currency], address);
+    // Register BlockCypher webhook only if PUBLIC_URL is set (optional — polling works without it)
+    const hookId = env.publicUrl && env.blockcypherToken
+      ? await this._registerAddressWebhook(CHAIN_MAP[currency], address)
+      : null;
 
     return { address, hookId };
   },
@@ -207,6 +208,62 @@ export const cryptoService = {
     return results;
   },
 
+  // Poll blockchain directly to check if a deposit has been received
+  async checkDepositOnChain(deposit) {
+    const COINGECKO_IDS = { BTC: 'bitcoin', LTC: 'litecoin', DOGE: 'dogecoin', ETH: 'ethereum' };
+
+    async function fetchPrice(currency) {
+      const id = COINGECKO_IDS[currency];
+      if (!id) return null;
+      try {
+        const { data } = await axios.get(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
+          { timeout: 6000 }
+        );
+        return data?.[id]?.usd ?? null;
+      } catch { return null; }
+    }
+
+    if (['BTC', 'LTC', 'DOGE'].includes(deposit.currency)) {
+      if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
+      const chain = CHAIN_MAP[deposit.currency];
+
+      const { data } = await axios.get(
+        `https://api.blockcypher.com/v1/${chain}/addrs/${deposit.address}?token=${env.blockcypherToken}`,
+        { timeout: 8000 }
+      );
+
+      const totalReceivedSats = data.total_received || 0;
+      const pendingSats       = data.unconfirmed_balance || 0;
+
+      if (totalReceivedSats === 0) {
+        return { confirmed: false, pending: pendingSats > 0, pendingSats };
+      }
+
+      const cryptoAmount = totalReceivedSats / 1e8;
+      const usdPrice     = await fetchPrice(deposit.currency);
+      if (!usdPrice) return { confirmed: false, pending: false, error: 'price_unavailable' };
+
+      return { confirmed: true, cryptoAmount, usdAmount: parseFloat((cryptoAmount * usdPrice).toFixed(2)), usdPrice };
+
+    } else if (deposit.currency === 'ETH') {
+      if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);
+
+      const provider   = new JsonRpcProvider(`https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`);
+      const balance    = await provider.getBalance(deposit.address);
+      const balanceEth = parseFloat(formatEther(balance));
+
+      if (balanceEth <= 0.0001) return { confirmed: false, pending: false };
+
+      const usdPrice = await fetchPrice('ETH');
+      if (!usdPrice) return { confirmed: false, pending: false, error: 'price_unavailable' };
+
+      return { confirmed: true, cryptoAmount: balanceEth, usdAmount: parseFloat((balanceEth * usdPrice).toFixed(2)), usdPrice };
+    }
+
+    return { confirmed: false, pending: false }; // XMR — manual only
+  },
+
   async sweepBtcLike(currency, destinationAddress) {
     const chain = CHAIN_MAP[currency];
     if (!chain) throw appError(`Unsupported currency: ${currency}`, 400);
@@ -222,8 +279,18 @@ export const cryptoService = {
     const root     = bip32.fromSeed(seed, network);
 
     const deposits = await prisma.deposit.findMany({ where: { currency } });
-    // Conservative fixed fees in satoshis/litoshis/dogoshi
-    const FIXED_FEE = { BTC: 5000, LTC: 100000, DOGE: 1000000 }[currency];
+
+    // Fetch live fee rate from BlockCypher (low_fee_per_kb = economy rate)
+    let feePerByte = { BTC: 10, LTC: 10, DOGE: 1000 }[currency]; // fallback sats/byte
+    try {
+      const { data: chainInfo } = await axios.get(
+        `https://api.blockcypher.com/v1/${chain}?token=${env.blockcypherToken}`
+      );
+      feePerByte = Math.ceil((chainInfo.low_fee_per_kb || feePerByte * 1000) / 1000);
+    } catch { /* use fallback */ }
+
+    // P2PKH tx size: 10 (overhead) + inputs*148 + outputs*34
+    // For 1-in / 1-out: 192 bytes. We don't know input count yet, estimate per deposit below.
 
     const results = [];
 
@@ -244,11 +311,13 @@ export const cryptoService = {
 
       if (utxos.length === 0) continue;
 
-      const totalSats = utxos.reduce((sum, u) => sum + u.value, 0);
-      const sendAmount = totalSats - FIXED_FEE;
+      const totalSats  = utxos.reduce((sum, u) => sum + u.value, 0);
+      const txBytes    = 10 + utxos.length * 148 + 34;
+      const fee        = feePerByte * txBytes;
+      const sendAmount = totalSats - fee;
 
       if (sendAmount <= 0) {
-        results.push({ depositId: dep.id, address, status: 'skipped', reason: 'Balance too low to cover fee', balanceSats: totalSats });
+        results.push({ depositId: dep.id, address, status: 'skipped', reason: `Balance (${totalSats} sats) too low to cover fee (${fee} sats @ ${feePerByte} sat/byte)`, balanceSats: totalSats });
         continue;
       }
 

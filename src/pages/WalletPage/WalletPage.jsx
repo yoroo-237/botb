@@ -196,13 +196,15 @@ function AddFundsModal({ onClose, onSuccess }) {
 }
 
 export default function WalletPage() {
-  const { user, balance } = useApp()
+  const { user, balance, loadUserData } = useApp()
   const [tab, setTab] = useState('deposits')
   const [deposits, setDeposits] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loadingDeposits, setLoadingDeposits] = useState(true)
   const [loadingTxns, setLoadingTxns] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const pollRef = useRef(null)
 
   const fetchDeposits = useCallback(async () => {
     setLoadingDeposits(true)
@@ -228,7 +230,44 @@ export default function WalletPage() {
     }
   }, [])
 
+  // Poll active deposits every 30s — called by interval and on-demand
+  const pollDeposits = useCallback(async (currentDeposits) => {
+    const active = (currentDeposits || deposits).filter(d => ['awaiting', 'partial'].includes(d.status))
+    if (active.length === 0) return
+
+    setChecking(true)
+    let anyConfirmed = false
+    try {
+      for (const dep of active) {
+        if (['XMR'].includes(dep.currency)) continue
+        try {
+          const data = await apiFetch(`/wallet/deposits/${dep.id}/check`, { method: 'POST' })
+          if (data?.deposit?.status === 'confirmed') anyConfirmed = true
+        } catch { /* ignore individual errors */ }
+      }
+    } finally {
+      setChecking(false)
+    }
+
+    if (anyConfirmed) {
+      await fetchDeposits()
+      await loadUserData()
+    }
+  }, [deposits, fetchDeposits, loadUserData])
+
   useEffect(() => { fetchDeposits() }, [fetchDeposits])
+
+  // Start/stop 30s polling based on whether there are active deposits
+  useEffect(() => {
+    const active = deposits.filter(d => ['awaiting', 'partial'].includes(d.status))
+    if (active.length === 0) {
+      clearInterval(pollRef.current)
+      return
+    }
+    clearInterval(pollRef.current)
+    pollRef.current = setInterval(() => pollDeposits(deposits), 30000)
+    return () => clearInterval(pollRef.current)
+  }, [deposits, pollDeposits])
 
   useEffect(() => {
     if (tab === 'history') fetchTransactions()
@@ -272,6 +311,11 @@ export default function WalletPage() {
 
         {tab === 'deposits' && (
           <div className={styles.tableWrap}>
+            {checking && (
+              <div style={{ padding: '8px 16px', background: '#f0f4ff', borderRadius: '6px', marginBottom: '8px', fontSize: '0.82rem', color: '#3b5bdb' }}>
+                Checking blockchain for new confirmations…
+              </div>
+            )}
             {loadingDeposits ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading deposits…</div>
             ) : (
