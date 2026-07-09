@@ -66,8 +66,9 @@ export const adminProductsController = {
 
   async remove(req, res) {
     const id = parseInt(req.params.id, 10);
-    await prisma.product.update({ where: { id }, data: { isActive: false } });
-    res.json(ok({ message: 'Product deactivated' }));
+    await prisma.productImage.deleteMany({ where: { productId: id } });
+    await prisma.product.delete({ where: { id } });
+    res.json(ok({ deleted: true }));
   },
 
   // ─── Images ─────────────────────────────────────────────────────────────────
