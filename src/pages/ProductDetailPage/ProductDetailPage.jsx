@@ -46,12 +46,15 @@ export default function ProductDetailPage() {
 
   // Try API first, fall back to static
   useEffect(() => {
+    let stale = false
     setApiLoading(true)
     setActiveImg(0)
+    setApiProduct(null)
     apiFetch(`/products/${slug}`)
-      .then(data => setApiProduct(data))
-      .catch(() => setApiProduct(null))
-      .finally(() => setApiLoading(false))
+      .then(data => { if (!stale) setApiProduct(data) })
+      .catch(() => { if (!stale) setApiProduct(null) })
+      .finally(() => { if (!stale) setApiLoading(false) })
+    return () => { stale = true }
   }, [slug])
 
   // Determine effective product data
@@ -214,18 +217,10 @@ export default function ProductDetailPage() {
             <h1 className={styles.productTitle}>{product.name}</h1>
             <p className={styles.price}>{formatPrice(product.price)}</p>
 
-            {product.description && (
-              product.description.startsWith('https://t.me') ? (
-                <div className={styles.description}>
-                  <a href={product.description} target="_blank" rel="noreferrer" className={styles.telegramLink}>
-                    Order via Telegram
-                  </a>
-                </div>
-              ) : (
-                <div className={styles.description} style={{ color: '#555', fontSize: '15px', lineHeight: 1.6 }}>
-                  {product.description}
-                </div>
-              )
+            {product.description && !product.description.startsWith('https://t.me') && (
+              <div className={styles.description} style={{ color: '#555', fontSize: '15px', lineHeight: 1.6 }}>
+                {product.description}
+              </div>
             )}
 
             <div className={styles.addToCartWrap}>
