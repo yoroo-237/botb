@@ -176,7 +176,11 @@ export function getProduct(slug) {
 /** Get product thumbnail (first image 300x300) */
 export function getThumb(product) {
   const img = product?.images?.[0]
-  return img?.thumbnail || img?.url || img?.src || 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp'
+  if (!img) return PH
+  // A video has no still-image representation of its own — never fall back
+  // to its raw file URL as an <img> src, only to an explicit thumbnail.
+  if (img.mediaType === 'video') return img.thumbnail || PH
+  return img.thumbnail || img.url || img.src || PH
 }
 
 /** Format price as $X,XXX.XX */

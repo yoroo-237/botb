@@ -14,11 +14,14 @@ function isVideoUrl(url = '') {
 
 // Normalize API images to a common format
 function normalizeMedia(images = []) {
-  return images.map(img => ({
-    url:       img.url       || img.src || '',
-    thumbnail: img.thumbnail || img.src || img.url || '',
-    mediaType: img.mediaType || (isVideoUrl(img.url || img.src || '') ? 'video' : 'image'),
-  }))
+  return images.map(img => {
+    const url        = img.url || img.src || ''
+    const mediaType  = img.mediaType || (isVideoUrl(url) ? 'video' : 'image')
+    // A video's own file can't be shown in an <img> tag — only fall back to
+    // the file URL as a "thumbnail" when it's actually an image.
+    const thumbnail  = img.thumbnail || (mediaType === 'video' ? '' : (img.src || img.url)) || ''
+    return { url, thumbnail, mediaType }
+  })
 }
 
 // Normalize static product images to the same format
@@ -107,7 +110,7 @@ export default function ProductDetailPage() {
         slug:   p.slug,
         name:   p.name,
         price:  Number(p.price),
-        images: normalizeMedia(p.images || []).map(m => ({ src: m.url, thumbnail: m.thumbnail })),
+        images: normalizeMedia(p.images || []).map(m => ({ src: m.url, thumbnail: m.thumbnail, mediaType: m.mediaType })),
       }))
     }
     if (!product) return []
@@ -148,7 +151,7 @@ export default function ProductDetailPage() {
       name:   product.name,
       slug:   product.slug,
       price:  product.price,
-      images: product.media.map(m => ({ src: m.url, thumbnail: m.thumbnail })),
+      images: product.media.map(m => ({ src: m.url, thumbnail: m.thumbnail, mediaType: m.mediaType })),
     }
     addItem(cartProduct, qty)
     setAdded(true)
