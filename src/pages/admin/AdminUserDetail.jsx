@@ -33,27 +33,35 @@ export default function AdminUserDetail() {
   const [balanceForm, setBalanceForm] = useState({ type: 'credit', amount: '', reason: '' })
 
   const fetchUser = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await adminFetch(`/admin/users/${id}`)
-      const u = data.user || data
-      setUser(u)
-      setEditForm({ username: u.username, role: u.role, markupPct: u.markupPct ?? 0 })
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    const data = await adminFetch(`/admin/users/${id}`)
+    return data.user || data
   }, [id])
 
-  useEffect(() => { fetchUser() }, [fetchUser])
+  // Refresh in place (after ban/edit/balance actions) — keeps current data visible while it runs
+  const refresh = useCallback(() => {
+    fetchUser()
+      .then(u => { setUser(u); setEditForm({ username: u.username, role: u.role, markupPct: u.markupPct ?? 0 }) })
+      .catch(e => setError(e.message))
+  }, [fetchUser])
+
+  useEffect(() => {
+    let stale = false
+    setLoading(true)
+    setUser(null)
+    setError('')
+    fetchUser()
+      .then(u => { if (!stale) { setUser(u); setEditForm({ username: u.username, role: u.role, markupPct: u.markupPct ?? 0 }) } })
+      .catch(e => { if (!stale) setError(e.message) })
+      .finally(() => { if (!stale) setLoading(false) })
+    return () => { stale = true }
+  }, [fetchUser])
 
   async function banToggle() {
     if (!confirm(`${user.isActive ? 'Ban' : 'Unban'} ${user.username}?`)) return
     setActionLoading(true)
     try {
       await adminFetch(`/admin/users/${id}/ban`, { method: 'PATCH' })
-      fetchUser()
+      refresh()
     } catch (e) {
       alert(e.message)
     } finally {
@@ -94,7 +102,7 @@ export default function AdminUserDetail() {
     try {
       await adminFetch(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(editForm) })
       setModal(null)
-      fetchUser()
+      refresh()
     } catch (e) {
       setActionError(e.message)
     } finally {
@@ -116,7 +124,7 @@ export default function AdminUserDetail() {
         }),
       })
       setModal(null)
-      fetchUser()
+      refresh()
     } catch (e) {
       setActionError(e.message)
     } finally {

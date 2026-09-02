@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminFetch } from './utils/api.js'
 import StatusBadge from '../../components/admin/StatusBadge.jsx'
@@ -64,24 +64,34 @@ export default function AdminUsers() {
   const [users, setUsers] = useState([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [tier, setTier] = useState('')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const requestIdRef = useRef(0)
+
+  // Debounce search input before it triggers a fetch
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   const fetchUsers = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ page, limit: 20 })
       if (search) params.set('search', search)
       if (tier) params.set('tier', tier)
       const data = await adminFetch(`/admin/users?${params}`)
+      if (requestId !== requestIdRef.current) return
       setUsers(data.users || data || [])
       setTotalPages(data.pagination?.totalPages || data.totalPages || 1)
     } catch {
-      setUsers([])
+      if (requestId === requestIdRef.current) setUsers([])
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [page, search, tier])
 
@@ -137,8 +147,8 @@ export default function AdminUsers() {
         <input
           className="admin-filter-input"
           placeholder="Search username…"
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
         />
         <select className="admin-filter-select" value={tier} onChange={e => { setTier(e.target.value); setPage(1) }}>
           <option value="">All Tiers</option>

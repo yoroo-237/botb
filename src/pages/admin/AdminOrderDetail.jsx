@@ -11,10 +11,15 @@ export default function AdminOrderDetail() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let stale = false
+    setLoading(true)
+    setOrder(null)
+    setError('')
     adminFetch(`/admin/orders/${id}`)
-      .then(d => setOrder(d.order || d))
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
+      .then(d => { if (!stale) setOrder(d.order || d) })
+      .catch(e => { if (!stale) setError(e.message) })
+      .finally(() => { if (!stale) setLoading(false) })
+    return () => { stale = true }
   }, [id])
 
   function formatDate(str) {

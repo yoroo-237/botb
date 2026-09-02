@@ -135,7 +135,7 @@ function MediaManager({ productId, images, onUpdated }) {
                     src={img.thumbnail || img.url}
                     alt={`Media ${idx + 1}`}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={e => { e.currentTarget.src = PLACEHOLDER }}
+                    onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = PLACEHOLDER }}
                   />
                 )}
 
@@ -646,7 +646,7 @@ export default function AdminProducts() {
                             src={firstMedia.thumbnail || (isVid ? '' : firstMedia.url)}
                             alt={p.name}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={e => { e.currentTarget.src = PLACEHOLDER }}
+                            onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = PLACEHOLDER }}
                           />
                           {isVid && (
                             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

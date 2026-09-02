@@ -14,19 +14,30 @@ export default function AdminSupportDetail() {
   const [error, setError] = useState('')
 
   const fetchTicket = useCallback(async () => {
-    try {
-      const data = await adminFetch(`/admin/support/tickets/${id}`)
-      const t = data.ticket || data
-      setTicket(t)
-      setMessages(t.messages || data.messages || [])
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    const data = await adminFetch(`/admin/support/tickets/${id}`)
+    const t = data.ticket || data
+    return { ticket: t, messages: t.messages || data.messages || [] }
   }, [id])
 
-  useEffect(() => { fetchTicket() }, [fetchTicket])
+  // Refresh in place (after reply/status change) — keeps current data visible while it runs
+  const refresh = useCallback(() => {
+    fetchTicket()
+      .then(({ ticket, messages }) => { setTicket(ticket); setMessages(messages) })
+      .catch(e => setError(e.message))
+  }, [fetchTicket])
+
+  useEffect(() => {
+    let stale = false
+    setLoading(true)
+    setTicket(null)
+    setMessages([])
+    setError('')
+    fetchTicket()
+      .then(({ ticket, messages }) => { if (!stale) { setTicket(ticket); setMessages(messages) } })
+      .catch(e => { if (!stale) setError(e.message) })
+      .finally(() => { if (!stale) setLoading(false) })
+    return () => { stale = true }
+  }, [fetchTicket])
 
   async function sendReply(e) {
     e.preventDefault()
@@ -38,7 +49,7 @@ export default function AdminSupportDetail() {
         body: JSON.stringify({ message: reply }),
       })
       setReply('')
-      fetchTicket()
+      refresh()
     } catch (e) {
       alert(e.message)
     } finally {
@@ -54,7 +65,7 @@ export default function AdminSupportDetail() {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       })
-      fetchTicket()
+      refresh()
     } catch (e) {
       alert(e.message)
     } finally {

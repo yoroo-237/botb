@@ -64,7 +64,7 @@ export default function CartPage() {
                           alt={item.name}
                           width={80} height={80}
                           className={styles.itemImg}
-                          onError={e => { e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
+                          onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
                         />
                       </Link>
                     </td>

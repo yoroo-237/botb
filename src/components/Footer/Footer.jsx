@@ -30,6 +30,7 @@ export default function Footer() {
                 src="https://bestofthebay.net/wp-content/uploads/2026/03/BOTB.jpg"
                 alt="BOTB"
                 className={styles.logoImg}
+                onError={e => { e.currentTarget.style.display = 'none' }}
               />
             </Link>
             <p className={styles.tagline}>Premium products, trusted community.</p>

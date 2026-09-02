@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminFetch } from './utils/api.js'
 import StatusBadge from '../../components/admin/StatusBadge.jsx'
@@ -62,24 +62,34 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [updateOrder, setUpdateOrder] = useState(null)
+  const requestIdRef = useRef(0)
+
+  // Debounce search input before it triggers a fetch
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   const fetchOrders = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams({ page, limit: 20 })
       if (search) params.set('search', search)
       if (status) params.set('status', status)
       const data = await adminFetch(`/admin/orders?${params}`)
+      if (requestId !== requestIdRef.current) return
       setOrders(data.orders || data || [])
       setTotalPages(data.totalPages || 1)
     } catch {
-      setOrders([])
+      if (requestId === requestIdRef.current) setOrders([])
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [page, search, status])
 
@@ -100,7 +110,7 @@ export default function AdminOrders() {
       </div>
 
       <div className="admin-filters">
-        <input className="admin-filter-input" placeholder="Search order # / customer…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        <input className="admin-filter-input" placeholder="Search order # / customer…" value={searchInput} onChange={e => setSearchInput(e.target.value)} />
         <select className="admin-filter-select" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
           <option value="">All Statuses</option>
           {ORDER_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}

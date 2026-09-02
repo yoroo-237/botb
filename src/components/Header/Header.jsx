@@ -91,6 +91,7 @@ export default function Header() {
                 alt="BOTB"
                 width={40} height={40}
                 className={styles.logoImg}
+                onError={e => { e.currentTarget.style.display = 'none' }}
               />
             </Link>
             <Link to="/" className={styles.siteTitle}>BOTB</Link>

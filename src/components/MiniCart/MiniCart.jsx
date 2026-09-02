@@ -73,7 +73,7 @@ export default function MiniCart({ isOpen, onClose }) {
                             alt={item.name}
                             width={60} height={60}
                             className={styles.itemImg}
-                            onError={e => { e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
+                            onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
                           />
                         </Link>
                       </td>

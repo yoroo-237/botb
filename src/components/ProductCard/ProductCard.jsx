@@ -28,7 +28,7 @@ export default function ProductCard({ product }) {
             className={styles.image}
             loading="lazy"
             decoding="async"
-            onError={e => { e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
+            onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = 'https://bestofthebay.net/wp-content/uploads/woocommerce-placeholder.webp' }}
           />
         </Link>
       </div>

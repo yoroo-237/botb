@@ -46,12 +46,15 @@ export default function ProductDetailPage() {
 
   // Try API first, fall back to static
   useEffect(() => {
+    let stale = false
     setApiLoading(true)
     setActiveImg(0)
+    setApiProduct(null)
     apiFetch(`/products/${slug}`)
-      .then(data => setApiProduct(data))
-      .catch(() => setApiProduct(null))
-      .finally(() => setApiLoading(false))
+      .then(data => { if (!stale) setApiProduct(data) })
+      .catch(() => { if (!stale) setApiProduct(null) })
+      .finally(() => { if (!stale) setApiLoading(false) })
+    return () => { stale = true }
   }, [slug])
 
   // Determine effective product data
@@ -85,13 +88,33 @@ export default function ProductDetailPage() {
     return null
   }, [apiProduct, staticProduct])
 
-  // Related products from same category
+  // Related products: try API (live catalog) first, fall back to static category match
+  const [apiRelated, setApiRelated] = useState(null)
+
+  useEffect(() => {
+    let stale = false
+    setApiRelated(null)
+    apiFetch(`/products/${slug}/related`)
+      .then(data => { if (!stale) setApiRelated(data) })
+      .catch(() => { if (!stale) setApiRelated(null) })
+    return () => { stale = true }
+  }, [slug])
+
   const related = useMemo(() => {
+    if (apiRelated) {
+      return apiRelated.map(p => ({
+        id:     p.id,
+        slug:   p.slug,
+        name:   p.name,
+        price:  Number(p.price),
+        images: normalizeMedia(p.images || []).map(m => ({ src: m.url, thumbnail: m.thumbnail })),
+      }))
+    }
     if (!product) return []
     return staticProducts
       .filter(p => String(p.id) !== String(product.id) && p.category === product.category)
       .slice(0, 4)
-  }, [product])
+  }, [apiRelated, product])
 
   if (apiLoading && !staticProduct) {
     return (
@@ -120,9 +143,12 @@ export default function ProductDetailPage() {
   const isVideo     = activeMedia?.mediaType === 'video'
 
   function handleAddToCart() {
-    const cartProduct = staticProduct || {
-      id: product.id, name: product.name, slug: product.slug,
-      price: product.price, images: [{ src: activeMedia?.url, thumbnail: activeMedia?.thumbnail }],
+    const cartProduct = {
+      id:     product.id,
+      name:   product.name,
+      slug:   product.slug,
+      price:  product.price,
+      images: product.media.map(m => ({ src: m.url, thumbnail: m.thumbnail })),
     }
     addItem(cartProduct, qty)
     setAdded(true)
@@ -166,7 +192,7 @@ export default function ProductDetailPage() {
                     src={activeMedia.url || PLACEHOLDER}
                     alt={product.name}
                     className={styles.mainImg}
-                    onError={e => { e.currentTarget.src = PLACEHOLDER }}
+                    onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = PLACEHOLDER }}
                   />
                 )
               ) : (
@@ -192,7 +218,7 @@ export default function ProductDetailPage() {
                           width={80}
                           height={80}
                           className={styles.thumbImg}
-                          onError={e => { e.currentTarget.src = PLACEHOLDER }}
+                          onError={e => { console.warn('Image failed to load:', e.currentTarget.src); e.currentTarget.onerror = null; e.currentTarget.src = PLACEHOLDER }}
                         />
                         {isThumbVideo && (
                           <div className={styles.thumbPlayOverlay}>
@@ -214,18 +240,10 @@ export default function ProductDetailPage() {
             <h1 className={styles.productTitle}>{product.name}</h1>
             <p className={styles.price}>{formatPrice(product.price)}</p>
 
-            {product.description && (
-              product.description.startsWith('https://t.me') ? (
-                <div className={styles.description}>
-                  <a href={product.description} target="_blank" rel="noreferrer" className={styles.telegramLink}>
-                    Order via Telegram
-                  </a>
-                </div>
-              ) : (
-                <div className={styles.description} style={{ color: '#555', fontSize: '15px', lineHeight: 1.6 }}>
-                  {product.description}
-                </div>
-              )
+            {product.description && !product.description.startsWith('https://t.me') && (
+              <div className={styles.description} style={{ color: '#555', fontSize: '15px', lineHeight: 1.6 }}>
+                {product.description}
+              </div>
             )}
 
             <div className={styles.addToCartWrap}>
