@@ -27,7 +27,7 @@ export default function Footer() {
           <div className={styles.brand}>
             <Link to="/" className={styles.logoLink}>
               <img
-                src="https://bestofthebay.net/wp-content/uploads/2026/03/BOTB.jpg"
+                src="/BOTB_logo.png"
                 alt="BOTB"
                 className={styles.logoImg}
                 onError={e => { e.currentTarget.style.display = 'none' }}
