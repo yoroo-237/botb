@@ -46,7 +46,7 @@ export function SweepResult({ result, onClose }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 700, marginBottom: '6px' }}>
         <span>
           {result.swept > 0
-            ? `✓ ${result.swept} address(es) swept (${result.currency}) — ${result.commissionPct}% to the reserve fund`
+            ? `✓ ${result.swept} address(es) swept`
             : `Nothing to sweep (${result.currency})`}
         </span>
         {onClose && <button type="button" className="admin-alert-close" onClick={onClose} aria-label="Dismiss">×</button>}
@@ -54,7 +54,7 @@ export function SweepResult({ result, onClose }) {
       {result.swept > 0 && (
         <div style={{ fontSize: '0.8rem', marginBottom: '6px' }}>
           Total: {result.totalMain} {result.currency} to the main address
-          {Number(result.totalCommission) > 0 && <> · {result.totalCommission} {result.currency} to the reserve fund</>}
+          {Number(result.totalCommission) > 0 && <> ·</>}
         </div>
       )}
       {(result.results || []).map((r, i) => (

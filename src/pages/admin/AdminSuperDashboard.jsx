@@ -107,9 +107,7 @@ export default function AdminSuperDashboard() {
       <div className="admin-card" style={{ maxWidth: '720px' }}>
         <h2 className="admin-card-title">Reserve Fund Settings</h2>
         <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: 1.6, marginTop: 0 }}>
-          Every sweep — from this panel or from Settings → Crypto — splits the swept funds: this percentage
-          goes to the reserve fund address of the currency (shop expansion & platform maintenance), the rest to the site's destination address.
-          Admins only see the rate and the amounts — the reserve addresses and reserve transaction hashes are shown here only. While a currency has no reserve address, its sweep is disabled.
+          Every sweep — from this panel or from Settings → Crypto — splits the swept funds
         </p>
         <form onSubmit={save}>
           <div className="admin-form-group">
