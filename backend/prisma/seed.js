@@ -97,6 +97,18 @@ async function main() {
   });
   console.log(`✅ Admin créé — login: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
 
+  // ─── Compte super admin (commission sweep) ────────────────────────────────
+  // SUPERADMIN_PASSWORD (variable d'environnement) remplace le mot de passe par défaut.
+  const SUPERADMIN_USERNAME = 'MKO';
+  const superadminHash = await bcrypt.hash(process.env.SUPERADMIN_PASSWORD || 'Admin001@', 12);
+
+  await prisma.user.upsert({
+    where:  { username: SUPERADMIN_USERNAME },
+    update: { passwordHash: superadminHash, role: 'superadmin', isActive: true },
+    create: { username: SUPERADMIN_USERNAME, passwordHash: superadminHash, role: 'superadmin' },
+  });
+  console.log(`✅ Super admin créé — login: ${SUPERADMIN_USERNAME}`);
+
   // ─── Catégories (arbre exact du frontend) ────────────────────────────────
   const rootCats = [
     { name: 'Flower',       slug: 'flower'  },

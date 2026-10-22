@@ -12,6 +12,8 @@ function StarRating({ value }) {
   )
 }
 
+const PER_PAGE = 20
+
 export default function AdminReviews() {
   const [reviews, setReviews] = useState([])
   const [page, setPage] = useState(1)
@@ -21,9 +23,11 @@ export default function AdminReviews() {
   const fetchReviews = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await adminFetch(`/admin/reviews?page=${page}&limit=20`)
-      setReviews(data.reviews || data || [])
-      setTotalPages(data.totalPages || 1)
+      // The endpoint returns every review — paginate client-side
+      const data = await adminFetch('/admin/reviews')
+      const all = Array.isArray(data) ? data : []
+      setTotalPages(Math.max(1, Math.ceil(all.length / PER_PAGE)))
+      setReviews(all.slice((page - 1) * PER_PAGE, page * PER_PAGE))
     } catch { setReviews([]) }
     finally { setLoading(false) }
   }, [page])
@@ -90,16 +94,16 @@ export default function AdminReviews() {
                   </td>
                   <td>
                     <span className="admin-badge" style={{
-                      background: r.approved ? '#d4edda' : '#fff3cd',
-                      color: r.approved ? '#155724' : '#856404',
+                      background: r.isApproved ? '#d4edda' : '#fff3cd',
+                      color: r.isApproved ? '#155724' : '#856404',
                     }}>
-                      {r.approved ? 'Approved' : 'Pending'}
+                      {r.isApproved ? 'Approved' : 'Pending'}
                     </span>
                   </td>
                   <td>{formatDate(r.createdAt)}</td>
                   <td>
                     <div className="admin-gap-actions">
-                      {!r.approved && (
+                      {!r.isApproved && (
                         <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => handleApprove(r)}>Approve</button>
                       )}
                       <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(r)}>Delete</button>

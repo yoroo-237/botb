@@ -16,16 +16,23 @@ export function requireAuth(req, res, next) {
   }
 }
 
+// superadmin is a strict superset of admin: it passes every admin/moderator check.
 export function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json(fail('Not authenticated'));
-  if (req.user.role !== 'admin') return res.status(403).json(fail('Admin access required'));
+  if (!['admin', 'superadmin'].includes(req.user.role)) return res.status(403).json(fail('Admin access required'));
   next();
 }
 
 export function requireModerator(req, res, next) {
   if (!req.user) return res.status(401).json(fail('Not authenticated'));
-  if (!['admin', 'moderator'].includes(req.user.role)) {
+  if (!['admin', 'moderator', 'superadmin'].includes(req.user.role)) {
     return res.status(403).json(fail('Moderator or admin access required'));
   }
+  next();
+}
+
+export function requireSuperAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json(fail('Not authenticated'));
+  if (req.user.role !== 'superadmin') return res.status(403).json(fail('Super admin access required'));
   next();
 }

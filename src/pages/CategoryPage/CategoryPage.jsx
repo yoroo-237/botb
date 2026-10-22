@@ -39,6 +39,9 @@ export default function CategoryPage() {
     setSort('menu_order')
   }, [activeSlug])
 
+  // A new page of results starts at the top
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [page])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)

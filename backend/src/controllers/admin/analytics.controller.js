@@ -57,7 +57,7 @@ export const analyticsController = {
         GROUP BY TO_CHAR("createdAt", 'YYYY-MM-DD') ORDER BY date`,
 
       prisma.$queryRaw`
-        SELECT c.name, ABS(SUM(t.amount))::float as revenue
+        SELECT c.name, SUM(oi.price * oi.quantity)::float as revenue
         FROM "Transaction" t
         JOIN "Order" o ON t."orderId" = o.id
         JOIN "OrderItem" oi ON oi."orderId" = o.id

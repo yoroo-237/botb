@@ -13,7 +13,7 @@ model User {
   id               Int       @id @default(autoincrement())
   username         String    @unique
   passwordHash     String
-  role             String    @default("customer")  // customer | moderator | admin
+  role             String    @default("customer")  // customer | moderator | admin | superadmin
   isActive         Boolean   @default(true)
   balance          Decimal   @default(0) @db.Decimal(12, 2)
   points           Int       @default(0)
@@ -45,6 +45,7 @@ model User {
   apiKeys        ApiKey[]
   notifications  Notification[]
   reviews        Review[]
+  sweepLogs      SweepLog[]
 }
 
 // ─── PRODUCTS & CATALOGUE ─────────────────────────────────────────────────────
@@ -168,6 +169,29 @@ model Transaction {
   order      Order?   @relation(fields: [orderId], references: [id])
   deposit    Deposit?
   createdAt  DateTime @default(now())
+}
+
+// One row per swept deposit address. Every sweep splits the funds between the
+// site's destination address and the commission address (see sweep.service).
+model SweepLog {
+  id                Int      @id @default(autoincrement())
+  currency          String
+  commissionPct     Decimal  @db.Decimal(5, 2)
+  totalAmount       Decimal  @db.Decimal(18, 8)
+  mainAmount        Decimal  @db.Decimal(18, 8)
+  mainAddress       String
+  mainTxHash        String?
+  commissionAmount  Decimal  @db.Decimal(18, 8)
+  commissionAddress String
+  commissionTxHash  String?
+  addressCount      Int      @default(0)
+  triggeredBy       Int?
+  createdAt         DateTime @default(now())
+
+  triggeredByUser User? @relation(fields: [triggeredBy], references: [id], onDelete: SetNull)
+
+  @@index([currency])
+  @@index([createdAt])
 }
 
 // ─── SUPPORT ──────────────────────────────────────────────────────────────────

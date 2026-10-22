@@ -1,25 +1,9 @@
 import crypto from 'crypto';
-import axios from 'axios';
 import { prisma } from '../db.js';
 import { walletService } from '../services/wallet.service.js';
+import { getUsdPrice as fetchUsdPrice } from '../services/price.service.js';
 import { ok } from '../utils/response.js';
 import { env } from '../config/env.js';
-
-const COINGECKO_IDS = { BTC: 'bitcoin', LTC: 'litecoin', DOGE: 'dogecoin' };
-
-async function fetchUsdPrice(currency) {
-  const id = COINGECKO_IDS[currency];
-  if (!id) return null;
-  try {
-    const { data } = await axios.get(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
-      { timeout: 6000 }
-    );
-    return data?.[id]?.usd ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export const webhookController = {
   // BlockCypher webhook — BTC, LTC, DOGE (confirmed-tx on HD wallet address)
@@ -99,6 +83,8 @@ export const webhookController = {
     for (const transfer of activities) {
       const toAddress = transfer.toAddress?.toLowerCase();
       if (!toAddress) continue;
+      // Only native ETH — an ERC-20 transfer to the same address is not an ETH deposit
+      if (transfer.asset && transfer.asset !== 'ETH') continue;
 
       const deposit = await prisma.deposit.findFirst({
         where: { address: { equals: toAddress, mode: 'insensitive' }, currency: 'ETH', status: { in: ['awaiting', 'partial'] } },
@@ -106,13 +92,28 @@ export const webhookController = {
 
       if (!deposit) continue;
 
-      const usdValue = parseFloat(transfer.value || 0);
-      if (usdValue > 0) {
-        await walletService.confirmDeposit(deposit.id, usdValue, `Auto-confirmed ETH via Alchemy`);
-        console.log(`[Webhook Alchemy] Deposit #${deposit.id} confirmed: $${usdValue}`);
-      } else {
+      // Alchemy reports `value` in ETH, not USD — convert at the live price
+      const ethAmount = parseFloat(transfer.value || 0);
+      if (!(ethAmount > 0)) {
         await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial' } });
+        continue;
       }
+
+      const usdPrice = await fetchUsdPrice('ETH');
+      if (!usdPrice) {
+        await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial', amountReceived: ethAmount } });
+        console.warn(`[Webhook Alchemy] Price fetch failed — deposit #${deposit.id} → partial`);
+        continue;
+      }
+
+      const usdAmount = parseFloat((ethAmount * usdPrice).toFixed(2));
+      await prisma.deposit.update({ where: { id: deposit.id }, data: { amountReceived: ethAmount } });
+      await walletService.confirmDeposit(
+        deposit.id,
+        usdAmount,
+        `Auto-confirmed ${ethAmount} ETH @ $${usdPrice} = $${usdAmount}`
+      );
+      console.log(`[Webhook Alchemy] Deposit #${deposit.id} confirmed: ${ethAmount} ETH → $${usdAmount}`);
     }
 
     res.json(ok('Processed'));

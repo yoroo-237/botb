@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { useCart } from '../../context/CartContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
@@ -19,7 +19,7 @@ const INITIAL_FORM = {
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart()
-  const { user, balance, loadingAuth } = useApp()
+  const { user, balance, loadingAuth, loadUserData } = useApp()
   const navigate = useNavigate()
   const [form, setForm] = useState(INITIAL_FORM)
   const [paymentMethod, setPaymentMethod] = useState('XMR')
@@ -27,8 +27,19 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmation, setConfirmation] = useState(null)
+  const [shipping, setShipping] = useState({ cost: 0, freeThreshold: 0 })
 
-  const shippingFee = 0
+  // Same rule as the backend (order.service): free above the threshold, else the flat cost
+  useEffect(() => {
+    apiFetch('/content/settings')
+      .then(d => setShipping({
+        cost:          parseFloat(d.settings?.shipping_cost) || 0,
+        freeThreshold: parseFloat(d.settings?.shipping_free_threshold) || 0,
+      }))
+      .catch(() => {})
+  }, [])
+
+  const shippingFee = shipping.freeThreshold > 0 && subtotal >= shipping.freeThreshold ? 0 : shipping.cost
   const total = subtotal + shippingFee
 
   if (loadingAuth) return <div style={{ padding: '40px', textAlign: 'center' }}>Loading…</div>
@@ -44,9 +55,12 @@ export default function CheckoutPage() {
             <p className={styles.successMsg}>
               Your order <strong>#{confirmation}</strong> has been received. You will be contacted for delivery details.
             </p>
-            <button onClick={() => navigate('/')} className="wp-element-button">
-              Continue Shopping
-            </button>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => navigate('/')} className="wp-element-button">
+                Continue Shopping
+              </button>
+              <Link to="/wallet" className="wp-element-button">View Wallet</Link>
+            </div>
           </div>
         </div>
       </main>
@@ -95,8 +109,10 @@ export default function CheckoutPage() {
         }),
       })
       clearCart()
+      loadUserData()  // the order was paid from the wallet — refresh the header balance
       const orderNumber = data.order?.orderNumber || data.order?.id || data.id || 'N/A'
       setConfirmation(orderNumber)
+      window.scrollTo({ top: 0 })
     } catch (err) {
       setSubmitError(err.message || 'Failed to place order. Please try again.')
     } finally {
@@ -105,6 +121,18 @@ export default function CheckoutPage() {
   }
 
   const balanceInsufficient = balance < total
+
+  if (items.length === 0) {
+    return (
+      <main className="site-main">
+        <div className="alignwide">
+          <h1 className={styles.pageTitle}>Checkout</h1>
+          <p>Your cart is empty.</p>
+          <Link to="/shop" className="wp-element-button">Return to shop</Link>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="site-main">

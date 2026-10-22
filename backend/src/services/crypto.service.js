@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HDNodeWallet, JsonRpcProvider, formatEther } from 'ethers';
+import { HDNodeWallet, JsonRpcProvider, formatEther, isAddress } from 'ethers';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -7,6 +7,7 @@ import { mnemonicToSeedSync } from 'bip39';
 import { env } from '../config/env.js';
 import { prisma } from '../db.js';
 import { appError } from '../utils/formatters.js';
+import { getUsdPrice } from './price.service.js';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -36,6 +37,20 @@ const BTC_NETWORKS = {
   },
 };
 
+// Smallest output each network relays — a commission output below this is dropped
+// (100% goes to the main address) rather than producing a transaction nodes reject.
+const DUST_SATS = { BTC: 546, LTC: 5460, DOGE: 1_000_000 };
+
+const trimAmount = sats => (sats / 1e8).toFixed(8).replace(/\.?0+$/, '') || '0';
+
+async function getHdMnemonic() {
+  // Seed: DB setting takes priority over env var
+  const dbSetting = await prisma.siteSetting.findUnique({ where: { key: 'btc_hd_seed' } });
+  const mnemonic  = dbSetting?.value?.trim() || env.btcHdSeed;
+  if (!mnemonic) throw appError('BTC/LTC/DOGE HD seed not configured. Set it in Admin → Settings → Crypto.', 500);
+  return mnemonic;
+}
+
 export const cryptoService = {
   async generateAddress(currency, depositId) {
     switch (currency) {
@@ -52,25 +67,26 @@ export const cryptoService = {
     }
   },
 
+  // Derive the key and P2PKH address of a deposit: m/44'/{coin}'/0'/0/{depositId}.
+  // Single source of truth for address generation, sweep signing and verification.
+  async deriveUtxoKey(currency, depositId, mnemonic) {
+    const network = BTC_NETWORKS[currency];
+    if (!network) throw appError(`Unsupported currency: ${currency}`, 400);
+
+    const root  = bip32.fromSeed(mnemonicToSeedSync(mnemonic || await getHdMnemonic()), network);
+    const child = root.derivePath(`m/44'/${BIP44_COIN[currency]}'/0'/0/${depositId}`);
+    const { address } = bitcoin.payments.p2pkh({ pubkey: Buffer.from(child.publicKey), network });
+    return { child, address, network };
+  },
+
+  isValidUtxoAddress(currency, address) {
+    try { bitcoin.address.toOutputScript(address, BTC_NETWORKS[currency]); return true; }
+    catch { return false; }
+  },
+
   // HD wallet address derivation — same pattern as ETH, no BlockCypher payment forward needed
   async _hdBitcoin(currency, depositId) {
-    // Seed: DB setting takes priority over env var
-    const dbSetting = await prisma.siteSetting.findUnique({ where: { key: 'btc_hd_seed' } });
-    const mnemonic  = dbSetting?.value?.trim() || env.btcHdSeed;
-    if (!mnemonic) throw appError('BTC/LTC/DOGE HD seed not configured. Set it in Admin → Settings → Crypto.', 500);
-
-    const network  = BTC_NETWORKS[currency];
-    const coinType = BIP44_COIN[currency];
-
-    // Derive child key: m/44'/{coin}'/0'/0/{depositId}
-    const seed  = mnemonicToSeedSync(mnemonic);
-    const root  = bip32.fromSeed(seed, network);
-    const child = root.derivePath(`m/44'/${coinType}'/0'/0/${depositId}`);
-
-    const { address } = bitcoin.payments.p2pkh({
-      pubkey:  Buffer.from(child.publicKey),
-      network,
-    });
+    const { address } = await this.deriveUtxoKey(currency, depositId);
 
     // Register BlockCypher webhook only if PUBLIC_URL is set (optional — polling works without it)
     const hookId = env.publicUrl && env.blockcypherToken
@@ -210,19 +226,7 @@ export const cryptoService = {
 
   // Poll blockchain directly to check if a deposit has been received
   async checkDepositOnChain(deposit) {
-    const COINGECKO_IDS = { BTC: 'bitcoin', LTC: 'litecoin', DOGE: 'dogecoin', ETH: 'ethereum' };
-
-    async function fetchPrice(currency) {
-      const id = COINGECKO_IDS[currency];
-      if (!id) return null;
-      try {
-        const { data } = await axios.get(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
-          { timeout: 6000 }
-        );
-        return data?.[id]?.usd ?? null;
-      } catch { return null; }
-    }
+    const fetchPrice = getUsdPrice;
 
     if (['BTC', 'LTC', 'DOGE'].includes(deposit.currency)) {
       if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
@@ -264,21 +268,27 @@ export const cryptoService = {
     return { confirmed: false, pending: false }; // XMR — manual only
   },
 
-  async sweepBtcLike(currency, destinationAddress) {
+  // Sweeps every BTC/LTC/DOGE deposit address. Each transaction has two outputs:
+  // (100 - pct)% to the site's destination address and pct% to the commission
+  // address. Below the network dust limit the commission output is dropped.
+  async sweepUtxoWithCommission(currency, destinationAddress, { pct, commissionAddress }) {
     const chain = CHAIN_MAP[currency];
     if (!chain) throw appError(`Unsupported currency: ${currency}`, 400);
     if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
 
-    const dbSetting = await prisma.siteSetting.findUnique({ where: { key: 'btc_hd_seed' } });
-    const mnemonic  = dbSetting?.value?.trim() || env.btcHdSeed;
-    if (!mnemonic) throw appError('BTC/LTC/DOGE HD seed not configured (Admin → Settings → Crypto)', 500);
-
     const network  = BTC_NETWORKS[currency];
-    const coinType = BIP44_COIN[currency];
-    const seed     = mnemonicToSeedSync(mnemonic);
-    const root     = bip32.fromSeed(seed, network);
+    const dust     = DUST_SATS[currency];
+    const mnemonic = await getHdMnemonic();
 
-    const deposits = await prisma.deposit.findMany({ where: { currency } });
+    // Reject bad addresses before touching any deposit — never build a tx to an unknown script
+    if (!this.isValidUtxoAddress(currency, destinationAddress)) {
+      throw appError(`Invalid ${currency} destination address: ${destinationAddress}`, 400);
+    }
+    if (pct > 0 && !this.isValidUtxoAddress(currency, commissionAddress)) {
+      throw appError(`Invalid ${currency} commission address: ${commissionAddress}`, 400);
+    }
+
+    const deposits = await prisma.deposit.findMany({ where: { currency }, orderBy: { id: 'asc' } });
 
     // Fetch live fee rate from BlockCypher (low_fee_per_kb = economy rate)
     let feePerByte = { BTC: 10, LTC: 10, DOGE: 1000 }[currency]; // fallback sats/byte
@@ -290,13 +300,12 @@ export const cryptoService = {
     } catch { /* use fallback */ }
 
     // P2PKH tx size: 10 (overhead) + inputs*148 + outputs*34
-    // For 1-in / 1-out: 192 bytes. We don't know input count yet, estimate per deposit below.
+    const feeFor = (inputs, outputs) => feePerByte * (10 + inputs * 148 + outputs * 34);
 
     const results = [];
 
     for (const dep of deposits) {
-      const child = root.derivePath(`m/44'/${coinType}'/0'/0/${dep.id}`);
-      const { address } = bitcoin.payments.p2pkh({ pubkey: Buffer.from(child.publicKey), network });
+      const { child, address } = await this.deriveUtxoKey(currency, dep.id, mnemonic);
 
       let utxos = [];
       try {
@@ -311,12 +320,26 @@ export const cryptoService = {
 
       if (utxos.length === 0) continue;
 
-      const totalSats  = utxos.reduce((sum, u) => sum + u.value, 0);
-      const txBytes    = 10 + utxos.length * 148 + 34;
-      const fee        = feePerByte * txBytes;
-      const sendAmount = totalSats - fee;
+      const totalSats = utxos.reduce((sum, u) => sum + u.value, 0);
 
-      if (sendAmount <= 0) {
+      // Two outputs cost 34 bytes more than one; if the commission share would be
+      // dust, fall back to a single output so the whole amount still moves.
+      let fee        = feeFor(utxos.length, 2);
+      let sendAmount = totalSats - fee;
+      let commission = pct > 0 ? Math.floor(sendAmount * pct / 100) : 0;
+      let main       = sendAmount - commission;
+      if (commission > 0 && (commission < dust || main < dust)) {
+        fee        = feeFor(utxos.length, 1);
+        sendAmount = totalSats - fee;
+        commission = 0;
+        main       = sendAmount;
+      } else if (commission === 0) {
+        fee        = feeFor(utxos.length, 1);
+        sendAmount = totalSats - fee;
+        main       = sendAmount;
+      }
+
+      if (main < dust) {
         results.push({ depositId: dep.id, address, status: 'skipped', reason: `Balance (${totalSats} sats) too low to cover fee (${fee} sats @ ${feePerByte} sat/byte)`, balanceSats: totalSats });
         continue;
       }
@@ -335,7 +358,8 @@ export const cryptoService = {
           });
         }
 
-        psbt.addOutput({ address: destinationAddress, value: sendAmount });
+        psbt.addOutput({ address: destinationAddress, value: main });
+        if (commission > 0) psbt.addOutput({ address: commissionAddress, value: commission });
 
         for (let i = 0; i < utxos.length; i++) psbt.signInput(i, child);
         psbt.finalizeAllInputs();
@@ -346,18 +370,28 @@ export const cryptoService = {
           { tx: txHex }
         );
 
-        results.push({ depositId: dep.id, address, status: 'swept', txHash: broadcast.tx?.hash, amountSats: sendAmount });
+        results.push({
+          depositId: dep.id, address, status: 'swept', txHash: broadcast.tx?.hash,
+          mainSats: main, commissionSats: commission,
+          amountMain: trimAmount(main), amountCommission: trimAmount(commission),
+        });
       } catch (err) {
-        results.push({ depositId: dep.id, address, status: 'error', reason: err.message });
+        const reason = err.response?.data?.error || err.message;
+        results.push({ depositId: dep.id, address, status: 'error', reason });
       }
     }
 
     return results;
   },
 
-  async sweepEth(destinationAddress) {
+  // Sweeps every confirmed ETH deposit address. An Ethereum transfer has a single
+  // recipient, so the commission share is sent as a second transaction (explicit
+  // consecutive nonces, so neither has to wait for the other to be mined).
+  async sweepEthWithCommission(destinationAddress, { pct, commissionAddress }) {
     if (!env.ethHdSeed)      throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);
+    if (!isAddress(destinationAddress)) throw appError(`Invalid ETH destination address: ${destinationAddress}`, 400);
+    if (pct > 0 && !isAddress(commissionAddress)) throw appError(`Invalid ETH commission address: ${commissionAddress}`, 400);
 
     const provider = new JsonRpcProvider(
       `https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`
@@ -373,6 +407,8 @@ export const cryptoService = {
     const feeData   = await provider.getFeeData();
     const gasPrice  = feeData.gasPrice ?? feeData.maxFeePerGas;
     if (!gasPrice) throw appError('Could not fetch gas price from Alchemy', 500);
+    const gasCost   = GAS_LIMIT * gasPrice;
+    const pctBasis  = BigInt(Math.round(pct * 100)); // pct in hundredths of a percent
 
     const results = [];
 
@@ -380,21 +416,49 @@ export const cryptoService = {
       const wallet  = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${dep.ethIndex}`)
                                   .connect(provider);
       const balance = await provider.getBalance(wallet.address);
-      const gasCost = GAS_LIMIT * gasPrice;
+      if (balance === 0n) continue;
 
-      if (balance <= gasCost) {
+      // Gas for the second transfer only when there is a commission to send
+      let spendable  = balance - gasCost * 2n;
+      let commission = pctBasis > 0n && spendable > 0n ? (spendable * pctBasis) / 10000n : 0n;
+      if (commission === 0n) spendable = balance - gasCost;
+      const main = spendable - commission;
+
+      if (main <= 0n) {
         results.push({ depositId: dep.id, address: wallet.address, status: 'skipped', reason: 'Balance too low to cover gas' });
         continue;
       }
 
+      let nonce, mainTx;
       try {
-        const tx = await wallet.sendTransaction({
-          to: destinationAddress, value: balance - gasCost, gasLimit: GAS_LIMIT, gasPrice,
+        nonce  = await provider.getTransactionCount(wallet.address, 'pending');
+        mainTx = await wallet.sendTransaction({
+          to: destinationAddress, value: main, gasLimit: GAS_LIMIT, gasPrice, nonce,
         });
-        results.push({ depositId: dep.id, address: wallet.address, status: 'swept', txHash: tx.hash });
       } catch (err) {
-        results.push({ depositId: dep.id, address: wallet.address, status: 'error', reason: err.message });
+        results.push({ depositId: dep.id, address: wallet.address, status: 'error', reason: err.shortMessage || err.message });
+        continue;
       }
+
+      // The main transfer is already broadcast: a failure here must not hide it.
+      // The unsent commission stays on the deposit address and goes out with the next sweep.
+      let commissionTxHash = null, commissionError = null;
+      if (commission > 0n) {
+        try {
+          const commissionTx = await wallet.sendTransaction({
+            to: commissionAddress, value: commission, gasLimit: GAS_LIMIT, gasPrice, nonce: nonce + 1,
+          });
+          commissionTxHash = commissionTx.hash;
+        } catch (err) {
+          commissionError = err.shortMessage || err.message;
+        }
+      }
+
+      results.push({
+        depositId: dep.id, address: wallet.address, status: 'swept',
+        txHash: mainTx.hash, commissionTxHash, commissionError,
+        amountMain: formatEther(main), amountCommission: commissionTxHash ? formatEther(commission) : '0',
+      });
     }
 
     return results;

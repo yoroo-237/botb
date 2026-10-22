@@ -39,6 +39,57 @@ function formatDate(str) {
   return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+const fmtCrypto = n => (Number(n) > 0 ? Number(n).toFixed(8).replace(/\.?0+$/, '') : null)
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Clipboard API unavailable (non-HTTPS or denied): fall back to a hidden textarea
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } finally { document.body.removeChild(ta) }
+  }
+}
+
+function useCopy() {
+  const [copied, setCopied] = useState(false)
+  async function copy(text) {
+    if (!text) return
+    await copyText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return [copied, copy]
+}
+
+// QR + address + countdown, shared by "Add Funds" and a deposit's "Details"
+function DepositAddress({ deposit }) {
+  const [copied, copy] = useCopy()
+  const cur = CURRENCIES.find(c => c.id === deposit.currency) || CURRENCIES[0]
+  return (
+    <>
+      <div className={styles.qrWrap}>
+        <QRCodeSVG value={`${cur.prefix}:${deposit.address}`} size={180} />
+      </div>
+
+      {deposit.expiresAt && <Countdown expiresAt={deposit.expiresAt} />}
+
+      <div className={styles.addrLabel}>Deposit Address</div>
+      <div className={styles.addrRow}>
+        <code className={styles.addrCode}>{deposit.address}</code>
+        <button className={styles.copyBtn} onClick={() => copy(deposit.address)}>
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+    </>
+  )
+}
+
 function Countdown({ expiresAt }) {
   const [remaining, setRemaining] = useState('')
 
@@ -71,10 +122,6 @@ function AddFundsModal({ onClose, onSuccess }) {
   const [generating, setGenerating] = useState(false)
   const [depositData, setDepositData] = useState(null)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
-
-  const cur = CURRENCIES.find(c => c.id === currency)
-  const uri = depositData ? `${cur.prefix}:${depositData.address}` : ''
 
   async function generate() {
     setGenerating(true)
@@ -91,15 +138,6 @@ function AddFundsModal({ onClose, onSuccess }) {
       setError(err.message || 'Failed to generate address')
     } finally {
       setGenerating(false)
-    }
-  }
-
-  function copyAddress() {
-    if (depositData?.address) {
-      navigator.clipboard.writeText(depositData.address).then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      })
     }
   }
 
@@ -155,19 +193,7 @@ function AddFundsModal({ onClose, onSuccess }) {
           <>
             <h2 className={styles.modalTitle}>Send {currency}</h2>
 
-            <div className={styles.qrWrap}>
-              <QRCodeSVG value={uri} size={180} />
-            </div>
-
-            {depositData.expiresAt && <Countdown expiresAt={depositData.expiresAt} />}
-
-            <div className={styles.addrLabel}>Deposit Address</div>
-            <div className={styles.addrRow}>
-              <code className={styles.addrCode}>{depositData.address}</code>
-              <button className={styles.copyBtn} onClick={copyAddress}>
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
+            <DepositAddress deposit={depositData} />
 
             <div className={styles.howItWorks}>
               <div className={styles.howTitle}>How it works</div>
@@ -195,6 +221,49 @@ function AddFundsModal({ onClose, onSuccess }) {
   )
 }
 
+function DepositDetailsModal({ deposit, onClose }) {
+  const open = ['awaiting', 'partial'].includes(deposit.status) && deposit.address && deposit.address !== 'pending'
+    && new Date(deposit.expiresAt) > new Date()
+  const received = fmtCrypto(deposit.amountReceived)
+  const credited = Number(deposit.usdCredited)
+  return (
+    <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={styles.modal}>
+        <button className={styles.modalClose} onClick={onClose} aria-label="Close">×</button>
+        <h2 className={styles.modalTitle}>Deposit #{deposit.id} · {deposit.currency}</h2>
+
+        {open ? (
+          <DepositAddress deposit={deposit} />
+        ) : (
+          <div className={styles.addrRow} style={{ marginBottom: '16px' }}>
+            <code className={styles.addrCode}>{deposit.address && deposit.address !== 'pending' ? deposit.address : '—'}</code>
+          </div>
+        )}
+
+        <dl className={styles.detailList}>
+          <dt>Status</dt><dd>{deposit.status}</dd>
+          <dt>Created</dt><dd>{new Date(deposit.createdAt).toLocaleString()}</dd>
+          {received && <><dt>Received</dt><dd>{received} {deposit.currency}</dd></>}
+          {credited > 0 && <><dt>Credited</dt><dd>${credited.toFixed(2)}</dd></>}
+          {deposit.confirmedAt && <><dt>Confirmed</dt><dd>{new Date(deposit.confirmedAt).toLocaleString()}</dd></>}
+        </dl>
+
+        {deposit.status === 'expired' && (
+          <p className={styles.detailNote}>
+            This address has expired. Do not send funds to it — generate a new one with “Add Funds”.
+            If you already sent a payment here, <Link to="/support" className={styles.supportLink}>open a support ticket</Link>.
+          </p>
+        )}
+        {deposit.status === 'partial' && (
+          <p className={styles.detailNote}>
+            Your payment was detected and is waiting for review. It will be credited shortly.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function WalletPage() {
   const { user, balance, loadUserData } = useApp()
   const [tab, setTab] = useState('deposits')
@@ -204,7 +273,14 @@ export default function WalletPage() {
   const [loadingTxns, setLoadingTxns] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [detailsDeposit, setDetailsDeposit] = useState(null)
+  const [tier, setTier] = useState(null)
   const pollRef = useRef(null)
+
+  // Tier is computed server-side from total spent
+  useEffect(() => {
+    apiFetch('/wallet').then(d => setTier(d?.tier || null)).catch(() => {})
+  }, [])
 
   const fetchDeposits = useCallback(async () => {
     setLoadingDeposits(true)
@@ -287,7 +363,7 @@ export default function WalletPage() {
               <div className={styles.balanceAmount}>${balance.toFixed(2)}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              {user?.tier && <span className={styles.tierBadge}>{user.tier}</span>}
+              {tier && <span className={styles.tierBadge}>{tier}</span>}
               <button className={styles.addFundsBtn} onClick={() => setShowModal(true)}>
                 + Add Funds
               </button>
@@ -351,7 +427,7 @@ export default function WalletPage() {
                       <td>
                         <button
                           className={styles.detailsBtn}
-                          onClick={() => alert(`Deposit ${d.id}\n\nAddress: ${d.address}\nExpected: ${d.expectedAmount ?? '—'}\nReceived: ${d.receivedAmount ?? '—'}`)}
+                          onClick={() => setDetailsDeposit(d)}
                         >
                           Details
                         </button>
@@ -403,6 +479,10 @@ export default function WalletPage() {
           <div className={styles.placeholder}>No legacy history available.</div>
         )}
       </div>
+
+      {detailsDeposit && (
+        <DepositDetailsModal deposit={detailsDeposit} onClose={() => setDetailsDeposit(null)} />
+      )}
 
       {showModal && (
         <AddFundsModal

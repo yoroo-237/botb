@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { requireAdmin } from '../../middlewares/auth.js';
 import { adminSettingsController } from '../../controllers/admin/settings.controller.js';
 import {
   categoriesController,
@@ -11,9 +10,6 @@ import {
 } from '../../controllers/admin/content.controller.js';
 
 const r = Router();
-
-// ─── ETH Sweep ────────────────────────────────────────────────────────────────
-r.post('/eth/sweep', requireAdmin, adminSettingsController.sweepEth);
 
 // ─── System Status ────────────────────────────────────────────────────────────
 r.get('/system-status', adminSettingsController.getSystemStatus);

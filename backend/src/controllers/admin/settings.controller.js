@@ -1,5 +1,4 @@
 import { prisma } from '../../db.js';
-import { cryptoService } from '../../services/crypto.service.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
 
@@ -11,10 +10,17 @@ const ALLOWED_KEYS = new Set([
   'btc_hd_seed',
 ]);
 
+const ADMIN_ROLES = ['admin', 'superadmin'];
+
 export const adminSettingsController = {
   async get(req, res) {
-    const rows     = await prisma.siteSetting.findMany({ orderBy: { key: 'asc' } });
-    const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    const rows = await prisma.siteSetting.findMany({ orderBy: { key: 'asc' } });
+    // "super_" keys (commission sweep) have their own endpoints; the HD seed can
+    // move every BTC/LTC/DOGE deposit, so moderators never receive it.
+    const visible = rows.filter(r =>
+      !r.key.startsWith('super_') && (r.key !== 'btc_hd_seed' || ADMIN_ROLES.includes(req.user.role))
+    );
+    const settings = Object.fromEntries(visible.map(r => [r.key, r.value]));
     res.json(ok({ settings }));
   },
 
@@ -31,26 +37,6 @@ export const adminSettingsController = {
     ));
 
     res.json(ok({ updated: entries.map(([k]) => k) }));
-  },
-
-  async sweepEth(req, res) {
-    const setting = await prisma.siteSetting.findUnique({ where: { key: 'eth_address' } });
-    if (!setting?.value?.trim()) throw appError('ETH destination address not configured (Admin → Settings → Crypto)', 400);
-
-    const results = await cryptoService.sweepEth(setting.value.trim());
-    res.json(ok({ swept: results.length, details: results }));
-  },
-
-  async sweepCrypto(req, res) {
-    const currency = req.params.currency?.toUpperCase();
-    if (!['BTC', 'LTC', 'DOGE'].includes(currency)) throw appError('Unsupported currency for sweep', 400);
-
-    const key = `${currency.toLowerCase()}_address`;
-    const setting = await prisma.siteSetting.findUnique({ where: { key } });
-    if (!setting?.value?.trim()) throw appError(`${currency} destination address not configured (Admin → Settings → Crypto)`, 400);
-
-    const results = await cryptoService.sweepBtcLike(currency, setting.value.trim());
-    res.json(ok({ currency, swept: results.filter(r => r.status === 'swept').length, details: results }));
   },
 
   async getSystemStatus(req, res) {

@@ -33,6 +33,9 @@ export default function HomePage() {
   // Reset page when search query changes
   useEffect(() => { setPage(1) }, [query])
 
+  // A new page of results starts at the top
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [page])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -68,9 +71,11 @@ export default function HomePage() {
           <p className={styles.resultsCount} role="status" aria-relevant="all">
             {loading
               ? 'Loading…'
-              : query
-                ? `Showing ${products.length} result${products.length !== 1 ? 's' : ''} for "${query}"`
-                : `Showing ${from}–${to} of ${total} results`
+              : total === 0
+                ? (query ? `No results for "${query}"` : 'No products')
+                : query
+                  ? `${total} result${total !== 1 ? 's' : ''} for "${query}" (${from}–${to})`
+                  : `Showing ${from}–${to} of ${total} results`
             }
           </p>
           <form className={styles.sortForm}>

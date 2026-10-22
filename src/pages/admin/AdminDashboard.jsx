@@ -164,7 +164,7 @@ export default function AdminDashboard() {
               ) : recentOrders.map(o => (
                 <tr key={o.id}>
                   <td><span className="admin-code">#{o.orderNumber || o.id}</span></td>
-                  <td>{o.user?.username || o.customerName || '—'}</td>
+                  <td>{o.user?.username || o.name || '—'}</td>
                   <td>${Number(o.total || 0).toFixed(2)}</td>
                   <td><StatusBadge type="status" value={o.status} /></td>
                 </tr>

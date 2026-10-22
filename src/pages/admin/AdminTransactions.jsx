@@ -9,7 +9,7 @@ export default function AdminTransactions() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
-    search: '', type: '', status: '', currency: '', dateFrom: '', dateTo: '',
+    search: '', type: '', status: '', dateFrom: '', dateTo: '',
   })
 
   const fetchTxns = useCallback(async () => {
@@ -18,8 +18,8 @@ export default function AdminTransactions() {
       const params = new URLSearchParams({ page, limit: 25 })
       Object.entries(filters).forEach(([k, v]) => v && params.set(k, v))
       const data = await adminFetch(`/admin/transactions?${params}`)
-      setTxns(data.transactions || data || [])
-      setTotalPages(data.totalPages || 1)
+      setTxns(data.transactions || [])
+      setTotalPages(data.pagination?.totalPages || 1)
     } catch {
       setTxns([])
     } finally {
@@ -30,7 +30,7 @@ export default function AdminTransactions() {
   useEffect(() => { fetchTxns() }, [fetchTxns])
 
   function clearFilters() {
-    setFilters({ search: '', type: '', status: '', currency: '', dateFrom: '', dateTo: '' })
+    setFilters({ search: '', type: '', status: '', dateFrom: '', dateTo: '' })
     setPage(1)
   }
 
@@ -54,31 +54,20 @@ export default function AdminTransactions() {
       </div>
 
       <div className="admin-filters">
-        <input className="admin-filter-input" placeholder="Search user/note…" value={filters.search} onChange={e => setF('search', e.target.value)} />
+        <input className="admin-filter-input" placeholder="Search username…" value={filters.search} onChange={e => setF('search', e.target.value)} />
         <select className="admin-filter-select" value={filters.type} onChange={e => setF('type', e.target.value)}>
           <option value="">All Types</option>
           <option value="deposit">Deposit</option>
-          <option value="withdrawal">Withdrawal</option>
           <option value="purchase">Purchase</option>
           <option value="refund">Refund</option>
           <option value="adjustment">Adjustment</option>
-          <option value="cashback">Cashback</option>
           <option value="bonus">Bonus</option>
         </select>
         <select className="admin-filter-select" value={filters.status} onChange={e => setF('status', e.target.value)}>
           <option value="">All Statuses</option>
-          <option value="completed">Completed</option>
+          <option value="confirmed">Confirmed</option>
           <option value="pending">Pending</option>
           <option value="failed">Failed</option>
-        </select>
-        <select className="admin-filter-select" value={filters.currency} onChange={e => setF('currency', e.target.value)}>
-          <option value="">All Currencies</option>
-          <option value="USD">USD</option>
-          <option value="BTC">BTC</option>
-          <option value="LTC">LTC</option>
-          <option value="DOGE">DOGE</option>
-          <option value="ETH">ETH</option>
-          <option value="XMR">XMR</option>
         </select>
         <input className="admin-filter-input" type="date" value={filters.dateFrom} onChange={e => setF('dateFrom', e.target.value)} title="From date" />
         <input className="admin-filter-input" type="date" value={filters.dateTo} onChange={e => setF('dateTo', e.target.value)} title="To date" />
@@ -93,8 +82,7 @@ export default function AdminTransactions() {
                 <th>ID</th>
                 <th>User</th>
                 <th>Type</th>
-                <th>Amount</th>
-                <th>Currency</th>
+                <th>Amount (USD)</th>
                 <th>Status</th>
                 <th>Note</th>
                 <th>Related To</th>
@@ -105,27 +93,30 @@ export default function AdminTransactions() {
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j}><span className="admin-skel" style={{ width: '70px', height: '16px' }} /></td>
                     ))}
                   </tr>
                 ))
               ) : txns.length === 0 ? (
-                <tr><td colSpan={9} className="admin-table-empty">No data found.</td></tr>
+                <tr><td colSpan={8} className="admin-table-empty">No data found.</td></tr>
               ) : txns.map(t => (
                 <tr key={t.id}>
                   <td><span className="admin-code">{t.id}</span></td>
                   <td>{t.user?.username || t.userId || '—'}</td>
                   <td><StatusBadge type="txn" value={t.type} /></td>
                   <td>
-                    <span style={{ color: t.amount >= 0 ? '#28a745' : '#dc3545', fontWeight: 700 }}>
-                      {t.amount >= 0 ? '+' : ''}{Number(t.amount).toFixed(2)}
+                    <span style={{ color: Number(t.amount) >= 0 ? '#28a745' : '#dc3545', fontWeight: 700 }}>
+                      {Number(t.amount) >= 0 ? '+' : ''}{Number(t.amount).toFixed(2)}
                     </span>
                   </td>
-                  <td>{t.currency || 'USD'}</td>
                   <td>{t.status || '—'}</td>
                   <td>{t.note || '—'}</td>
-                  <td>{t.relatedId ? <span className="admin-code">{t.relatedId}</span> : '—'}</td>
+                  <td>
+                    {t.order ? <span className="admin-code">{t.order.orderNumber}</span>
+                      : t.deposit ? <span className="admin-code">{t.deposit.currency} deposit</span>
+                      : '—'}
+                  </td>
                   <td>{formatDate(t.createdAt)}</td>
                 </tr>
               ))}

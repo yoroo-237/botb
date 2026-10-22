@@ -6,6 +6,5 @@ const r = Router();
 
 r.get('/',                        c.get);
 r.put('/',                        requireAdmin, c.update);
-r.post('/sweep/:currency',        requireAdmin, c.sweepCrypto);
 
 export default r;

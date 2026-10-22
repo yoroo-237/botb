@@ -35,14 +35,25 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     setLoading(true)
+    setError('')
     adminFetch(`/admin/analytics?period=${period}`)
       .then(d => setData(d))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [period])
 
+  // Map the /admin/analytics response to what each chart expects
   const summary = data?.summary || {}
-  const charts = data?.charts || {}
+  const charts = {
+    revenue:            data?.revenueChart || [],
+    orders:             data?.ordersChart || [],
+    users:              data?.newUsersChart || [],
+    revenueByCategory:  (data?.topCategories || []).map(c => ({ name: c.name, value: Number(c.revenue || 0) })),
+    topProducts:        data?.topProducts || [],
+    depositsByCurrency: (data?.depositsByCurrency || []).map(d => ({ name: d.currency, value: d.value })),
+    orderStatus:        Object.entries(data?.ordersStatusChart || {}).map(([name, value]) => ({ name, value })),
+    revenueByMethod:    (data?.revenueByMethod || []).map(r => ({ name: r.method, value: r.revenue })),
+  }
 
   return (
     <div>
@@ -51,7 +62,7 @@ export default function AdminAnalytics() {
           <h1 className="admin-page-title">Analytics</h1>
           <p className="admin-page-subtitle">Performance metrics and insights</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {PERIODS.map(p => (
             <button
               key={p.value}
@@ -68,11 +79,11 @@ export default function AdminAnalytics() {
 
       {/* Summary Cards */}
       <div className="admin-stat-grid">
-        <StatCard label="Total Revenue" value={`$${(summary.totalRevenue || 0).toFixed(2)}`} loading={loading} />
-        <StatCard label="Total Orders" value={summary.totalOrders ?? 0} loading={loading} />
+        <StatCard label="Revenue" value={`$${(summary.revenue || 0).toFixed(2)}`} loading={loading} />
+        <StatCard label="Orders" value={summary.orders ?? 0} loading={loading} />
         <StatCard label="New Users" value={summary.newUsers ?? 0} loading={loading} />
         <StatCard label="Avg Order Value" value={`$${(summary.avgOrderValue || 0).toFixed(2)}`} loading={loading} />
-        <StatCard label="Conversion Rate" value={`${(summary.conversionRate || 0).toFixed(1)}%`} loading={loading} />
+        <StatCard label="Deposits Credited" value={`$${(summary.totalDeposits || 0).toFixed(2)}`} loading={loading} />
       </div>
 
       {!loading && (
@@ -150,21 +161,21 @@ export default function AdminAnalytics() {
 
           {/* Top Products by revenue */}
           <div className="admin-chart-wrap">
-            <div className="admin-chart-title">Top Products by Revenue</div>
+            <div className="admin-chart-title">Top Products by Units Sold</div>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={charts.topProducts || []} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
-                <Bar dataKey="revenue" fill="#f7931a" radius={[0, 4, 4, 0]} />
+                <Tooltip formatter={v => [v, 'Units sold']} />
+                <Bar dataKey="sold" fill="#f7931a" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
           {/* Deposits by currency */}
           <div className="admin-chart-wrap">
-            <div className="admin-chart-title">Deposits by Currency</div>
+            <div className="admin-chart-title">Deposits by Currency (USD credited)</div>
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie data={charts.depositsByCurrency || []} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label>
@@ -193,11 +204,11 @@ export default function AdminAnalytics() {
 
           {/* User tiers */}
           <div className="admin-chart-wrap">
-            <div className="admin-chart-title">User Tiers Distribution</div>
+            <div className="admin-chart-title">Order Value by Payment Method</div>
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={charts.userTiers || []} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label>
-                  {(charts.userTiers || []).map((_, i) => (
+                <Pie data={charts.revenueByMethod || []} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name" label>
+                  {(charts.revenueByMethod || []).map((_, i) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
                 </Pie>

@@ -36,7 +36,7 @@ export default function Footer() {
             <p className={styles.tagline}>Premium products, trusted community.</p>
             <div className={styles.socials}>
               <a
-                href="https://t.me/BESTOFTHEBAYOGDM"
+                href="https://t.me/BESTOFTHEBAYOGDM1"
                 className={`${styles.socialBtn} ${styles.tg}`}
                 target="_blank"
                 rel="noreferrer"
@@ -76,7 +76,7 @@ export default function Footer() {
             <ul className={styles.colList}>
               <li>
                 <a
-                  href="https://t.me/BESTOFTHEBAYOGDM"
+                  href="https://t.me/BESTOFTHEBAYOGDM1"
                   target="_blank"
                   rel="noreferrer"
                   className={styles.colLink}

@@ -17,7 +17,7 @@ export default function AdminFaq() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ question: '', answer: '', order: 0 })
+  const [form, setForm] = useState({ question: '', answer: '', position: 0 })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,8 +32,8 @@ export default function AdminFaq() {
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
-  function openCreate() { setForm({ question: '', answer: '', order: items.length + 1 }); setModal({ mode: 'create' }); setError('') }
-  function openEdit(item) { setForm({ question: item.question, answer: item.answer, order: item.order ?? 0 }); setModal({ mode: 'edit', item }); setError('') }
+  function openCreate() { setForm({ question: '', answer: '', position: items.length + 1 }); setModal({ mode: 'create' }); setError('') }
+  function openEdit(item) { setForm({ question: item.question, answer: item.answer, position: item.position ?? 0 }); setModal({ mode: 'edit', item }); setError('') }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -84,7 +84,7 @@ export default function AdminFaq() {
                 <tr><td colSpan={4} className="admin-table-empty">No data found.</td></tr>
               ) : items.map(item => (
                 <tr key={item.id}>
-                  <td>{item.order ?? '—'}</td>
+                  <td>{item.position ?? '—'}</td>
                   <td style={{ maxWidth: '240px' }}>{item.question}</td>
                   <td style={{ maxWidth: '300px', color: '#888', fontSize: '0.85rem' }}>{item.answer?.slice(0, 80)}{item.answer?.length > 80 ? '…' : ''}</td>
                   <td>
@@ -106,7 +106,7 @@ export default function AdminFaq() {
           <form onSubmit={handleSubmit}>
             <div className="admin-form-group">
               <label className="admin-label">Order</label>
-              <input className="admin-input" type="number" value={form.order} onChange={e => setForm(f => ({ ...f, order: parseInt(e.target.value) }))} />
+              <input className="admin-input" type="number" value={form.position} onChange={e => setForm(f => ({ ...f, position: parseInt(e.target.value, 10) || 0 }))} />
             </div>
             <div className="admin-form-group">
               <label className="admin-label">Question</label>

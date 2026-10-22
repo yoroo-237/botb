@@ -6,6 +6,34 @@ import Pagination from '../../components/admin/Pagination.jsx'
 const CURRENCY_COLORS = {
   BTC: '#f7931a', LTC: '#345d9d', DOGE: '#c2a633', ETH: '#627eea', XMR: '#ff6600',
 }
+const UTXO = ['BTC', 'LTC', 'DOGE']
+const LIMIT = 20
+
+const fmtUsd = n => (n == null ? '—' : `$${Number(n).toFixed(2)}`)
+const fmtC   = n => (n == null ? '—' : (Number(n).toFixed(8).replace(/\.?0+$/, '') || '0'))
+const isOpen = d => d.status === 'awaiting' || d.status === 'partial'
+const hasAddress = d => d.address && d.address !== 'pending'
+
+function truncateAddr(addr) {
+  if (!addr || addr === 'pending') return '—'
+  if (addr.length <= 16) return addr
+  return `${addr.slice(0, 8)}…${addr.slice(-6)}`
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Clipboard API unavailable (non-HTTPS or denied): fall back to a hidden textarea
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } finally { document.body.removeChild(ta) }
+  }
+}
 
 function CurrencyBadge({ value }) {
   const color = CURRENCY_COLORS[value] || '#888'
@@ -16,6 +44,46 @@ function CurrencyBadge({ value }) {
   )
 }
 
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="admin-modal">
+        <button className="admin-modal-close" onClick={onClose} aria-label="Close">×</button>
+        <h2 className="admin-modal-title">{title}</h2>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ErrorBox({ children }) {
+  return children ? <div className="admin-alert admin-alert-error">{children}</div> : null
+}
+
+function InfoRows({ rows }) {
+  return (
+    <div className="admin-info-list" style={{ marginBottom: '14px' }}>
+      {rows.filter(Boolean).map(([label, value, color]) => (
+        <div key={label} className="admin-info-row">
+          <span className="admin-info-label">{label}</span>
+          <span className="admin-info-value" style={color ? { color, fontWeight: 600 } : undefined}>{value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DepositHeading({ deposit }) {
+  return (
+    <div className="admin-flex" style={{ marginBottom: '14px', flexWrap: 'wrap' }}>
+      <CurrencyBadge value={deposit.currency} />
+      <span className="admin-code">#{deposit.id}</span>
+      <span style={{ fontSize: '0.85rem', color: '#666' }}>{deposit.user?.username || '—'}</span>
+    </div>
+  )
+}
+
+// ── Confirm (manual credit) ───────────────────────────────────────────────────
 function ConfirmModal({ deposit, onClose, onConfirmed }) {
   const [form, setForm] = useState({ usdAmount: '', note: '', xmrChecks: false })
   const [loading, setLoading] = useState(false)
@@ -24,7 +92,7 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
   async function handleConfirm(e) {
     e.preventDefault()
     if (deposit.currency === 'XMR' && !form.xmrChecks) {
-      setError('Please confirm XMR checklist')
+      setError('Please confirm the XMR checklist first.')
       return
     }
     setLoading(true)
@@ -44,243 +112,214 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
   }
 
   return (
-    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="admin-modal">
-        <button className="admin-modal-close" onClick={onClose}>×</button>
-        <h2 className="admin-modal-title">Confirm Deposit</h2>
-        {error && <div style={{ color: '#dc3545', marginBottom: '12px', fontSize: '0.875rem' }}>{error}</div>}
-
-        {deposit.currency === 'XMR' && (
-          <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
-            <strong>XMR Manual Checklist</strong>
-            <label style={{ display: 'flex', gap: '8px', marginTop: '8px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={form.xmrChecks} onChange={e => setForm(f => ({ ...f, xmrChecks: e.target.checked }))} />
-              I have verified the XMR transaction on the blockchain and confirmed the received amount.
-            </label>
-          </div>
-        )}
-
-        <form onSubmit={handleConfirm}>
-          <div className="admin-form-group">
-            <label className="admin-label">USD Amount to Credit</label>
-            <input className="admin-input" type="number" step="0.01" required value={form.usdAmount} onChange={e => setForm(f => ({ ...f, usdAmount: e.target.value }))} />
-          </div>
-          <div className="admin-form-group">
-            <label className="admin-label">Note (optional)</label>
-            <input className="admin-input" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
-          </div>
-          <div className="admin-modal-actions">
-            <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="admin-btn admin-btn-success" disabled={loading}>
-              {loading ? 'Confirming…' : 'Confirm Deposit'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function ExpireModal({ deposit, onClose, onExpired }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleExpire() {
-    setLoading(true)
-    setError('')
-    try {
-      await adminFetch(`/admin/deposits/${deposit.id}/expire`, { method: 'PATCH' })
-      onExpired()
-      onClose()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="admin-modal">
-        <button className="admin-modal-close" onClick={onClose}>×</button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-            </svg>
-          </div>
-          <div>
-            <h2 className="admin-modal-title" style={{ margin: 0 }}>Expire Deposit</h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>This action cannot be undone</p>
-          </div>
+    <Modal title="Confirm Deposit" onClose={onClose}>
+      <DepositHeading deposit={deposit} />
+      {deposit.currency === 'XMR' ? (
+        <div className="admin-alert admin-alert-warning" style={{ display: 'block' }}>
+          <strong>XMR manual checklist</strong>
+          <ol style={{ margin: '6px 0 8px', paddingLeft: '18px', lineHeight: 1.6 }}>
+            <li>Open your Monero wallet and find the transaction from this customer (ask for the TX hash in a ticket).</li>
+            <li>Convert the XMR amount to USD at today's rate.</li>
+            <li>Enter the USD amount below — this credits the customer's balance.</li>
+          </ol>
+          <label style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.xmrChecks} onChange={e => setForm(f => ({ ...f, xmrChecks: e.target.checked }))} />
+            I have verified the XMR transaction and the received amount.
+          </label>
         </div>
-
-        <div style={{ background: '#f8f9fa', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
-          <span style={{ color: '#888' }}>Deposit ID</span>
-          <span className="admin-code">#{deposit.id}</span>
-          <span style={{ color: '#888' }}>User</span>
-          <span>{deposit.user?.username || deposit.userId}</span>
-          <span style={{ color: '#888' }}>Currency</span>
-          <span>{deposit.currency}</span>
-          <span style={{ color: '#888' }}>Expected</span>
-          <span>{deposit.expectedAmount ?? '—'}</span>
-        </div>
-
-        {error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
-            {error}
-          </div>
-        )}
-
-        <div className="admin-modal-actions">
-          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="admin-btn admin-btn-danger" onClick={handleExpire} disabled={loading}>
-            {loading ? 'Expiring…' : 'Confirm Expire'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CleanupModal({ onClose, onDone }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleCleanup() {
-    setLoading(true)
-    setError('')
-    try {
-      const data = await adminFetch('/admin/deposits/cleanup', { method: 'POST' })
-      onDone(data.message || 'Cleanup completed.')
-      onClose()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="admin-modal">
-        <button className="admin-modal-close" onClick={onClose}>×</button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fff7ed', border: '1px solid #fdba74', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          </div>
-          <div>
-            <h2 className="admin-modal-title" style={{ margin: 0 }}>Cleanup Expired Deposits</h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>BlockCypher forwards will be deleted</p>
-          </div>
-        </div>
-
-        <p style={{ fontSize: '0.875rem', color: '#555', marginBottom: '16px', lineHeight: 1.5 }}>
-          This will mark all pending expired deposits as <strong>expired</strong> and delete their associated BlockCypher forwarding addresses.
+      ) : (
+        <p style={{ fontSize: '0.85rem', color: '#666', marginTop: 0 }}>
+          {deposit.currency} deposits are normally credited automatically. Use this only if the payment arrived but was not credited
+          (check “$ Value” and “Wallet” first).
         </p>
+      )}
 
-        {error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
-            {error}
-          </div>
-        )}
+      <ErrorBox>{error}</ErrorBox>
 
+      <form onSubmit={handleConfirm}>
+        <div className="admin-form-group">
+          <label className="admin-label">USD Amount to Credit *</label>
+          <input className="admin-input" type="number" min="0.01" step="0.01" required autoFocus value={form.usdAmount} onChange={e => setForm(f => ({ ...f, usdAmount: e.target.value }))} />
+        </div>
+        <div className="admin-form-group">
+          <label className="admin-label">Note (optional)</label>
+          <input className="admin-input" value={form.note} placeholder="Internal note…" onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
+        </div>
         <div className="admin-modal-actions">
-          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="admin-btn admin-btn-danger" onClick={handleCleanup} disabled={loading}>
-            {loading ? 'Cleaning up…' : 'Run Cleanup'}
+          <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="admin-btn admin-btn-success" disabled={loading}>
+            {loading ? 'Confirming…' : 'Confirm & Credit'}
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 
-function PurgeModal({ onClose, onDone }) {
+// ── Generic yes/no action (expire, cleanup, purge) ────────────────────────────
+function ActionModal({ title, children, confirmLabel, busyLabel, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handlePurge() {
+  async function run() {
     setLoading(true)
     setError('')
     try {
-      const data = await adminFetch('/admin/deposits/purge-blockcypher', { method: 'POST' })
-      onDone(data.message || 'Purge completed.')
+      await onConfirm()
       onClose()
     } catch (e) {
       setError(e.message)
-    } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="admin-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="admin-modal">
-        <button className="admin-modal-close" onClick={onClose}>×</button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-            </svg>
-          </div>
-          <div>
-            <h2 className="admin-modal-title" style={{ margin: 0 }}>Purge All BlockCypher Forwards</h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>Deletes ALL forwards, including orphans</p>
-          </div>
-        </div>
-
-        <p style={{ fontSize: '0.875rem', color: '#555', marginBottom: '16px', lineHeight: 1.5 }}>
-          This queries BlockCypher directly and deletes <strong>every</strong> registered forwarding address on your token (BTC, LTC, DOGE) — including ones not in your database. Use this to clear a full quota and resolve persistent 429 errors.
-        </p>
-
-        {error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px' }}>
-            {error}
-          </div>
-        )}
-
-        <div className="admin-modal-actions">
-          <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="admin-btn admin-btn-danger" onClick={handlePurge} disabled={loading}>
-            {loading ? 'Purging…' : 'Purge All Forwards'}
-          </button>
-        </div>
+    <Modal title={title} onClose={onClose}>
+      <div style={{ fontSize: '0.875rem', color: '#555', lineHeight: 1.6, marginBottom: '16px' }}>{children}</div>
+      <ErrorBox>{error}</ErrorBox>
+      <div className="admin-modal-actions">
+        <button className="admin-btn admin-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+        <button className="admin-btn admin-btn-danger" onClick={run} disabled={loading}>
+          {loading ? busyLabel : confirmLabel}
+        </button>
       </div>
-    </div>
+    </Modal>
+  )
+}
+
+// ── Read-only inspections: USD value / on-chain wallet / HD key ──────────────
+function InspectModal({ title, inspect, onClose, children }) {
+  return (
+    <Modal title={title} onClose={onClose}>
+      <DepositHeading deposit={inspect.deposit} />
+      {inspect.loading && <div style={{ color: '#888', fontSize: '0.875rem', padding: '12px 0' }}>Loading…</div>}
+      <ErrorBox>{inspect.error}</ErrorBox>
+      {inspect.data && children(inspect.data)}
+      <div className="admin-modal-actions">
+        <button className="admin-btn admin-btn-secondary" onClick={onClose}>Close</button>
+      </div>
+    </Modal>
+  )
+}
+
+function UsdValueBody({ v }) {
+  return (
+    <>
+      <InfoRows rows={[
+        ['Current price', v.price ? `${fmtUsd(v.price)} / ${v.currency}` : 'unavailable'],
+        v.expectedAmount != null && ['Expected', `${fmtC(v.expectedAmount)} ${v.currency} ≈ ${fmtUsd(v.expectedUsd)}`],
+        ['Received (recorded)', `${fmtC(v.receivedAmount)} ${v.currency} ≈ ${fmtUsd(v.receivedUsd)}`, v.receivedAmount > 0 ? '#198754' : undefined],
+        ['Credited to customer', v.usdCredited > 0 ? fmtUsd(v.usdCredited) : 'not credited yet', v.usdCredited > 0 ? '#198754' : '#888'],
+        ['Status', <StatusBadge key="s" type="deposit" value={v.status} />],
+      ]} />
+      <p className="admin-text-muted" style={{ lineHeight: 1.6 }}>
+        USD values use today's price ({v.priceSource || 'no price source available'}). The credited amount used the price at
+        confirmation time, so the two can differ.
+        {v.currency === 'XMR' && ' XMR amounts are only known after manual verification in your Monero wallet.'}
+      </p>
+    </>
+  )
+}
+
+function WalletBody({ w }) {
+  return (
+    <>
+      <div className="admin-code" style={{ display: 'block', padding: '8px 10px', marginBottom: '12px', wordBreak: 'break-all' }}>{w.address}</div>
+      <InfoRows rows={[
+        ['Balance now', `${fmtC(w.total)} ${w.currency} ≈ ${fmtUsd(w.totalUsd)}`, w.total > 0 ? '#198754' : '#888'],
+        w.unconfirmed ? ['Unconfirmed', `${fmtC(w.unconfirmed)} ${w.currency}`, '#b45309'] : null,
+        w.totalReceived != null && ['Total ever received', `${fmtC(w.totalReceived)} ${w.currency} ≈ ${fmtUsd(w.totalReceivedUsd)}`],
+        w.totalSent != null && ['Total sent out (swept)', `${fmtC(w.totalSent)} ${w.currency}`],
+        ['Transactions', w.txCount],
+        ['Recorded as received', `${fmtC(w.recordedReceived)} ${w.currency}`],
+        ['Credited to customer', w.usdCredited > 0 ? fmtUsd(w.usdCredited) : 'not credited yet'],
+      ]} />
+      <p className="admin-text-muted" style={{ lineHeight: 1.6 }}>
+        Live data from {w.source}. A balance of 0 after a deposit usually means the funds were already swept — compare with
+        “Total ever received”.
+      </p>
+    </>
+  )
+}
+
+function VerifyBody({ v }) {
+  return (
+    <>
+      <div className={'admin-alert ' + (v.match ? 'admin-alert-success' : 'admin-alert-error')} style={{ display: 'block' }}>
+        <strong>{v.match ? '✓ Match' : '✗ Mismatch'}</strong> —{' '}
+        {v.match
+          ? 'the stored address was derived from the current HD seed. Sweeps can sign for this deposit.'
+          : 'the current HD seed derives a different address. Sweeps cannot sign for this deposit until the original seed is restored.'}
+      </div>
+      {[['Stored address', v.storedAddress], ['Derived address', v.derivedAddress]].map(([label, value]) => (
+        <div key={label} style={{ marginBottom: '10px' }}>
+          <div className="admin-info-label" style={{ marginBottom: '4px' }}>{label}</div>
+          <div className="admin-code" style={{ display: 'block', padding: '6px 10px', wordBreak: 'break-all' }}>{value}</div>
+        </div>
+      ))}
+      {!v.match && (
+        <p className="admin-text-muted" style={{ lineHeight: 1.6 }}>
+          Recovery: restore the seed that was active when deposit #{v.depositId} was created in Settings → Crypto, run the sweep,
+          then put the current seed back.
+        </p>
+      )}
+    </>
+  )
+}
+
+function AddressModal({ deposit, onClose }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    await copyText(deposit.address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <Modal title="Deposit Address" onClose={onClose}>
+      <DepositHeading deposit={deposit} />
+      <div className="admin-code" style={{ display: 'block', padding: '12px 14px', fontSize: '0.85rem', lineHeight: 1.6, wordBreak: 'break-all' }}>
+        {deposit.address}
+      </div>
+      <div className="admin-modal-actions">
+        <button className="admin-btn admin-btn-secondary" onClick={onClose}>Close</button>
+        <button className="admin-btn admin-btn-primary" onClick={copy}>{copied ? '✓ Copied!' : 'Copy Address'}</button>
+      </div>
+    </Modal>
   )
 }
 
 export default function AdminDeposits() {
   const [deposits, setDeposits] = useState([])
+  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [status, setStatus] = useState('')
   const [currency, setCurrency] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [notice, setNotice] = useState(null) // { type, text }
+
   const [confirmDeposit, setConfirmDeposit] = useState(null)
-  const [expireDeposit, setExpireDeposit] = useState(null)
-  const [showCleanup, setShowCleanup] = useState(false)
-  const [showPurge, setShowPurge]     = useState(false)
-  const [cleanupMsg, setCleanupMsg]   = useState('')
-  const [reregisterLoading, setReregisterLoading] = useState({})
+  const [action, setAction] = useState(null)       // 'expire' | 'cleanup' | 'purge'
+  const [actionTarget, setActionTarget] = useState(null)
+  const [addrDeposit, setAddrDeposit] = useState(null)
+  const [inspect, setInspect] = useState(null)     // { kind, deposit, loading, data, error }
+  const [hookLoading, setHookLoading] = useState({})
 
   const fetchDeposits = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
-      const params = new URLSearchParams({ page, limit: 20 })
+      const params = new URLSearchParams({ page, limit: LIMIT })
       if (status) params.set('status', status)
       if (currency) params.set('currency', currency)
       const data = await adminFetch(`/admin/deposits?${params}`)
-      setDeposits(data.deposits || data || [])
-      setTotalPages(data.totalPages || 1)
-    } catch {
+      setDeposits(data.deposits || [])
+      setTotal(data.pagination?.total ?? 0)
+      setTotalPages(data.pagination?.totalPages || 1)
+    } catch (e) {
       setDeposits([])
+      setLoadError(e.message)
     } finally {
       setLoading(false)
     }
@@ -288,48 +327,86 @@ export default function AdminDeposits() {
 
   useEffect(() => { fetchDeposits() }, [fetchDeposits])
 
-  function handleCleanupDone(msg) {
-    setCleanupMsg(msg)
-    fetchDeposits()
-    setTimeout(() => setCleanupMsg(''), 5000)
+  function flash(text, type = 'success') {
+    setNotice({ text, type })
   }
 
-  async function handleReregisterWebhook(deposit) {
-    setReregisterLoading(v => ({ ...v, [deposit.id]: true }))
+  async function openInspect(deposit, kind) {
+    const path = { usd: 'usd-value', chain: 'onchain', verify: 'verify-address' }[kind]
+    setInspect({ kind, deposit, loading: true, data: null, error: '' })
     try {
-      const data = await adminFetch(`/admin/deposits/${deposit.id}/reregister-webhook`, { method: 'POST' })
-      setCleanupMsg(data.message || 'Webhook registered')
-      fetchDeposits()
-      setTimeout(() => setCleanupMsg(''), 6000)
+      const data = await adminFetch(`/admin/deposits/${deposit.id}/${path}`)
+      setInspect({ kind, deposit, loading: false, data, error: '' })
     } catch (e) {
-      setCleanupMsg('Error: ' + e.message)
-      setTimeout(() => setCleanupMsg(''), 6000)
-    } finally {
-      setReregisterLoading(v => ({ ...v, [deposit.id]: false }))
+      setInspect({ kind, deposit, loading: false, data: null, error: e.message })
     }
   }
 
-  function formatDate(str) {
-    if (!str) return '—'
-    return new Date(str).toLocaleString()
+  async function reregisterHook(deposit) {
+    setHookLoading(v => ({ ...v, [deposit.id]: true }))
+    try {
+      const data = await adminFetch(`/admin/deposits/${deposit.id}/reregister-webhook`, { method: 'POST' })
+      flash(data.message || 'Webhook registered', data.hookId ? 'success' : 'error')
+      fetchDeposits()
+    } catch (e) {
+      flash(e.message, 'error')
+    } finally {
+      setHookLoading(v => ({ ...v, [deposit.id]: false }))
+    }
   }
+
+  const actions = {
+    expire: {
+      title: 'Expire Deposit',
+      confirmLabel: 'Expire', busyLabel: 'Expiring…',
+      body: d => <>Deposit <strong>#{d.id}</strong> ({d.currency}, {d.user?.username || '—'}) will be marked as expired and nothing will be credited. Funds sent to it afterwards will not be detected automatically.</>,
+      run: async d => { await adminFetch(`/admin/deposits/${d.id}/expire`, { method: 'PATCH' }); flash(`Deposit #${d.id} expired.`) },
+    },
+    cleanup: {
+      title: 'Cleanup Expired Deposits',
+      confirmLabel: 'Run Cleanup', busyLabel: 'Cleaning up…',
+      body: () => <>All awaiting / partial deposits past their expiry time will be marked <strong>expired</strong> and their BlockCypher webhooks deleted.</>,
+      run: async () => { const d = await adminFetch('/admin/deposits/cleanup', { method: 'POST' }); flash(`${d.cleaned ?? 0} expired deposit(s) cleaned up.`) },
+    },
+    purge: {
+      title: 'Purge All BlockCypher Webhooks',
+      confirmLabel: 'Purge All', busyLabel: 'Purging…',
+      body: () => <>Deletes <strong>every</strong> webhook and legacy forward registered on your BlockCypher token (BTC, LTC, DOGE) — including ones not in the database. Use it to free a full quota (persistent 429 errors). Open deposits will then rely on the customer's on-chain check until “Register Hook” is used again.</>,
+      run: async () => { const d = await adminFetch('/admin/deposits/purge-blockcypher', { method: 'POST' }); flash(d.message || 'Purge completed.') },
+    },
+  }
+
+  function openAction(kind, deposit = null) {
+    setActionTarget(deposit)
+    setAction(kind)
+  }
+
+  const from = total === 0 ? 0 : (page - 1) * LIMIT + 1
+  const to   = Math.min(page * LIMIT, total)
 
   return (
     <div>
       <div className="admin-page-header">
         <div>
           <h1 className="admin-page-title">Deposits</h1>
-          <p className="admin-page-subtitle">Manage crypto deposits</p>
+          <p className="admin-page-subtitle">{loading ? 'Loading…' : `${total} deposit${total !== 1 ? 's' : ''}${total ? ` · showing ${from}–${to}` : ''}`}</p>
         </div>
       </div>
 
-      {/* Info panels */}
       <div className="admin-grid-2" style={{ marginBottom: '20px' }}>
-        <div style={{ background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '8px', padding: '14px', fontSize: '0.85rem', color: '#155724' }}>
-          <strong> Auto-confirmed currencies:</strong> BTC, LTC, DOGE, ETH — credited automatically after sufficient blockchain confirmations.
+        <div className="admin-alert admin-alert-success" style={{ display: 'block', margin: 0 }}>
+          <strong>Auto-confirmed — BTC · LTC · DOGE · ETH</strong>
+          <div style={{ marginTop: '4px', lineHeight: 1.6 }}>
+            A unique address is derived per deposit. After 1 on-chain confirmation the webhook (or the customer's own check
+            on the Wallet page) credits the balance at the live price. <strong>No action needed.</strong>
+          </div>
         </div>
-        <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '8px', padding: '14px', fontSize: '0.85rem', color: '#856404' }}>
-          <strong> Manual review required:</strong> XMR deposits must be manually confirmed by an admin after verifying on the blockchain.
+        <div className="admin-alert admin-alert-warning" style={{ display: 'block', margin: 0 }}>
+          <strong>Manual review — XMR</strong>
+          <div style={{ marginTop: '4px', lineHeight: 1.6 }}>
+            All XMR deposits share one address. The customer opens a support ticket with the TX hash; verify it in your Monero
+            wallet, then click <strong>Confirm</strong> and enter the USD amount to credit.
+          </div>
         </div>
       </div>
 
@@ -337,41 +414,32 @@ export default function AdminDeposits() {
         <select className="admin-filter-select" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
           <option value="">All Statuses</option>
           <option value="awaiting">Awaiting</option>
+          <option value="partial">Partial</option>
           <option value="confirmed">Confirmed</option>
           <option value="expired">Expired</option>
-          <option value="partial">Partial</option>
         </select>
         <select className="admin-filter-select" value={currency} onChange={e => { setCurrency(e.target.value); setPage(1) }}>
           <option value="">All Currencies</option>
-          <option value="BTC">BTC</option>
-          <option value="LTC">LTC</option>
-          <option value="DOGE">DOGE</option>
-          <option value="ETH">ETH</option>
-          <option value="XMR">XMR</option>
+          {Object.keys(CURRENCY_COLORS).map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button className="admin-filter-btn" onClick={fetchDeposits}>Refresh</button>
-        <button
-          className="admin-filter-btn"
-          style={{ background: '#dc3545', color: '#fff', borderColor: '#dc3545' }}
-          onClick={() => setShowCleanup(true)}
-          title="Delete BlockCypher forwards for all expired pending deposits"
-        >
-          Cleanup Expired
-        </button>
-        <button
-          className="admin-filter-btn"
-          style={{ background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }}
-          onClick={() => setShowPurge(true)}
-          title="Delete ALL BlockCypher forwards (including orphans not in DB)"
-        >
-          Purge BlockCypher
-        </button>
-        {cleanupMsg && (
-          <span style={{ fontSize: '13px', color: '#198754', fontWeight: 500 }}>
-            ✓ {cleanupMsg}
-          </span>
-        )}
+        <button className="admin-filter-btn" onClick={fetchDeposits} disabled={loading}>Refresh</button>
+        <div className="admin-filters-end">
+          <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => openAction('cleanup')} title="Expire overdue deposits and delete their webhooks">
+            Cleanup Expired
+          </button>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openAction('purge')} title="Delete ALL BlockCypher webhooks, including orphans">
+            Purge BlockCypher
+          </button>
+        </div>
       </div>
+
+      {notice && (
+        <div className={'admin-alert ' + (notice.type === 'error' ? 'admin-alert-error' : 'admin-alert-success')}>
+          <span>{notice.text}</span>
+          <button className="admin-alert-close" onClick={() => setNotice(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
+      <ErrorBox>{loadError && `Could not load deposits: ${loadError}`}</ErrorBox>
 
       <div className="admin-card">
         <div className="admin-table-wrap">
@@ -401,36 +469,70 @@ export default function AdminDeposits() {
                   </tr>
                 ))
               ) : deposits.length === 0 ? (
-                <tr><td colSpan={11} className="admin-table-empty">No data found.</td></tr>
+                <tr><td colSpan={11} className="admin-table-empty">No deposits found.</td></tr>
               ) : deposits.map(d => (
                 <tr key={d.id}>
-                  <td><span className="admin-code">{d.id}</span></td>
-                  <td>{d.user?.username || d.userId || '—'}</td>
+                  <td><span className="admin-code">#{d.id}</span></td>
+                  <td style={{ fontWeight: 600 }}>{d.user?.username || d.userId || '—'}</td>
                   <td><CurrencyBadge value={d.currency} /></td>
-                  <td><span className="admin-code" title={d.address}>{d.address?.slice(0, 14)}…</span></td>
-                  <td>{d.expectedAmount ?? '—'}</td>
-                  <td>{d.receivedAmount ?? '—'}</td>
-                  <td>{d.usdCredited ? `$${Number(d.usdCredited).toFixed(2)}` : '—'}</td>
-                  <td><StatusBadge type="deposit" value={d.status} /></td>
-                  <td>{d.expiresAt ? new Date(d.expiresAt).toLocaleDateString() : '—'}</td>
-                  <td>{formatDate(d.createdAt)}</td>
+                  <td>
+                    {hasAddress(d) ? (
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" style={{ fontFamily: 'monospace' }} title={d.address} onClick={() => setAddrDeposit(d)}>
+                        {truncateAddr(d.address)}
+                      </button>
+                    ) : '—'}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                    {d.amountExpected != null ? `${fmtC(d.amountExpected)} ${d.currency}` : '—'}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap', fontFamily: 'monospace', color: d.amountReceived > 0 ? '#198754' : '#999' }}>
+                    {d.amountReceived > 0 ? `${fmtC(d.amountReceived)} ${d.currency}` : '—'}
+                  </td>
+                  <td style={{ fontWeight: 700, color: d.usdCredited > 0 ? '#198754' : '#999' }}>
+                    {d.usdCredited > 0 ? fmtUsd(d.usdCredited) : '—'}
+                  </td>
                   <td>
                     <div className="admin-gap-actions">
-                      {(d.status === 'awaiting' || d.status === 'partial') && (
-                        <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmDeposit(d)}>Confirm</button>
+                      <StatusBadge type="deposit" value={d.status} />
+                      {d.currency === 'XMR' && isOpen(d) && (
+                        <span className="admin-badge" style={{ background: '#fff3cd', color: '#856404' }}>MANUAL</span>
                       )}
-                      {d.status === 'awaiting' && (
-                        <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExpireDeposit(d)}>Expire</button>
+                    </div>
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap', color: isOpen(d) && new Date(d.expiresAt) < new Date() ? '#dc2626' : undefined }}>
+                    {isOpen(d) && d.expiresAt ? new Date(d.expiresAt).toLocaleString() : '—'}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{new Date(d.createdAt).toLocaleString()}</td>
+                  <td>
+                    <div className="admin-gap-actions">
+                      {isOpen(d) && (
+                        <>
+                          <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmDeposit(d)}>Confirm</button>
+                          <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => openAction('expire', d)}>Expire</button>
+                        </>
                       )}
-                      {['BTC', 'LTC', 'DOGE'].includes(d.currency) && (d.status === 'awaiting' || d.status === 'partial') && (
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" title="USD value of the funds the customer sent" onClick={() => openInspect(d, 'usd')}>
+                        $ Value
+                      </button>
+                      {d.currency !== 'XMR' && hasAddress(d) && (
+                        <button className="admin-btn admin-btn-secondary admin-btn-sm" title="Live balance of the deposit address on the blockchain" onClick={() => openInspect(d, 'chain')}>
+                          Wallet
+                        </button>
+                      )}
+                      {UTXO.includes(d.currency) && hasAddress(d) && (
+                        <button className="admin-btn admin-btn-secondary admin-btn-sm" title="Check that the stored address matches the current HD seed" onClick={() => openInspect(d, 'verify')}>
+                          Verify
+                        </button>
+                      )}
+                      {UTXO.includes(d.currency) && isOpen(d) && (
                         <button
                           className="admin-btn admin-btn-secondary admin-btn-sm"
-                          title={d.hookId ? `Hook: ${d.hookId}` : 'No webhook registered — click to register'}
-                          style={!d.hookId ? { borderColor: '#f59e0b', color: '#b45309' } : {}}
-                          onClick={() => handleReregisterWebhook(d)}
-                          disabled={!!reregisterLoading[d.id]}
+                          title={d.hookId ? `Webhook ${d.hookId} — click to register again` : 'No webhook registered — click to register'}
+                          style={!d.hookId ? { borderColor: '#f59e0b', color: '#b45309' } : undefined}
+                          onClick={() => reregisterHook(d)}
+                          disabled={!!hookLoading[d.id]}
                         >
-                          {reregisterLoading[d.id] ? '…' : d.hookId ? '↺ Hook' : '⚠ Register Hook'}
+                          {hookLoading[d.id] ? '…' : d.hookId ? '↺ Hook' : '⚠ Register Hook'}
                         </button>
                       )}
                     </div>
@@ -444,16 +546,37 @@ export default function AdminDeposits() {
       </div>
 
       {confirmDeposit && (
-        <ConfirmModal deposit={confirmDeposit} onClose={() => setConfirmDeposit(null)} onConfirmed={fetchDeposits} />
+        <ConfirmModal
+          deposit={confirmDeposit}
+          onClose={() => setConfirmDeposit(null)}
+          onConfirmed={() => { flash(`Deposit #${confirmDeposit.id} confirmed and credited.`); fetchDeposits() }}
+        />
       )}
-      {expireDeposit && (
-        <ExpireModal deposit={expireDeposit} onClose={() => setExpireDeposit(null)} onExpired={fetchDeposits} />
+
+      {action && (
+        <ActionModal
+          title={actions[action].title}
+          confirmLabel={actions[action].confirmLabel}
+          busyLabel={actions[action].busyLabel}
+          onClose={() => setAction(null)}
+          onConfirm={async () => { await actions[action].run(actionTarget); fetchDeposits() }}
+        >
+          {actions[action].body(actionTarget)}
+        </ActionModal>
       )}
-      {showCleanup && (
-        <CleanupModal onClose={() => setShowCleanup(false)} onDone={handleCleanupDone} />
-      )}
-      {showPurge && (
-        <PurgeModal onClose={() => setShowPurge(false)} onDone={handleCleanupDone} />
+
+      {addrDeposit && <AddressModal deposit={addrDeposit} onClose={() => setAddrDeposit(null)} />}
+
+      {inspect && (
+        <InspectModal
+          title={{ usd: 'USD Value', chain: 'Deposit Wallet', verify: 'HD Key Verification' }[inspect.kind]}
+          inspect={inspect}
+          onClose={() => setInspect(null)}
+        >
+          {data => inspect.kind === 'usd' ? <UsdValueBody v={data} />
+            : inspect.kind === 'chain' ? <WalletBody w={data} />
+            : <VerifyBody v={data} />}
+        </InspectModal>
       )}
     </div>
   )

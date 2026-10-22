@@ -35,7 +35,13 @@ export async function apiFetch(endpoint, options = {}) {
     }
   }
 
-  const json = await res.json()
+  // A proxy error page or an unknown route answers with HTML, not JSON
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error(`Server error (${res.status}). Please try again.`)
+  }
   if (!json.success) throw new Error(json.error || 'Request failed')
   return json.data
 }

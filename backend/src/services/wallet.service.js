@@ -67,6 +67,14 @@ export const walletService = {
     if (usdAmount <= 0) throw appError('USD amount must be positive', 400);
 
     return prisma.$transaction(async (tx) => {
+      // Claim the deposit atomically: the webhook and the customer's on-chain check
+      // can confirm the same deposit concurrently — only one of them may credit it.
+      const { count } = await tx.deposit.updateMany({
+        where: { id: depositId, status: { not: 'confirmed' } },
+        data:  { status: 'confirmed', usdCredited: usdAmount, confirmedAt: new Date() },
+      });
+      if (count === 0) throw appError('This deposit is already confirmed', 409);
+
       const txn = await tx.transaction.create({
         data: {
           frontendId: formatTxnId(),
@@ -81,12 +89,7 @@ export const walletService = {
 
       await tx.deposit.update({
         where: { id: depositId },
-        data: {
-          status:        'confirmed',
-          usdCredited:   usdAmount,
-          confirmedAt:   new Date(),
-          transactionId: txn.id,
-        },
+        data:  { transactionId: txn.id },
       });
 
       await tx.user.update({

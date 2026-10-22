@@ -1,20 +1,112 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 import { apiFetch } from '../../utils/api.js'
+import { isStaff } from '../../utils/roles.js'
 import styles from './SupportPage.module.css'
 
-const CATEGORIES = ['Order Issue', 'Deposit', 'Account', 'Product', 'Other']
-const PRIORITIES  = ['low', 'medium', 'high', 'urgent']
+// Values accepted by the backend (SupportTicket.category / .priority)
+const CATEGORIES = [
+  { value: 'order',   label: 'Order Issue' },
+  { value: 'deposit', label: 'Deposit' },
+  { value: 'account', label: 'Account' },
+  { value: 'other',   label: 'Other' },
+]
+const PRIORITIES = ['low', 'normal', 'high', 'urgent']
+const EMPTY_FORM = { subject: '', category: 'order', priority: 'normal', message: '' }
+
+const STATUS_LABEL = { open: 'Open', in_progress: 'Answered', resolved: 'Resolved', closed: 'Closed' }
+const isClosed = t => ['resolved', 'closed'].includes(t.status)
+
+function formatDate(str) {
+  return str ? new Date(str).toLocaleString() : ''
+}
+
+function TicketThread({ ticketId, onChanged }) {
+  const [ticket, setTicket] = useState(null)
+  const [error, setError] = useState('')
+  const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const load = useCallback(() => {
+    apiFetch(`/tickets/${ticketId}`).then(setTicket).catch(e => setError(e.message))
+  }, [ticketId])
+
+  useEffect(() => { load() }, [load])
+
+  async function sendReply(e) {
+    e.preventDefault()
+    if (!reply.trim()) return
+    setSending(true)
+    setError('')
+    try {
+      await apiFetch(`/tickets/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ message: reply }) })
+      setReply('')
+      load()
+      onChanged?.()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (error && !ticket) return <div className={styles.errorBox}>{error}</div>
+  if (!ticket) return <p className={styles.muted}>Loading…</p>
+
+  return (
+    <div className={styles.thread}>
+      {ticket.messages.map(m => (
+        <div key={m.id} className={styles.message + (m.isAdmin ? ' ' + styles.messageStaff : '')}>
+          <div className={styles.messageMeta}>
+            <strong>{m.isAdmin ? 'Support' : 'You'}</strong> · {formatDate(m.createdAt)}
+          </div>
+          <div className={styles.messageText}>{m.message}</div>
+        </div>
+      ))}
+      {isClosed(ticket) ? (
+        <p className={styles.muted}>This ticket is {ticket.status}. Open a new ticket if you still need help.</p>
+      ) : (
+        <form onSubmit={sendReply} className={styles.form} style={{ gap: '10px' }}>
+          {error && <div className={styles.errorBox}>{error}</div>}
+          <textarea
+            className={styles.textarea}
+            rows={3}
+            value={reply}
+            onChange={e => setReply(e.target.value)}
+            placeholder="Write a reply…"
+            aria-label="Reply"
+          />
+          <button type="submit" className={styles.submitBtn} disabled={sending || !reply.trim()}>
+            {sending ? 'Sending…' : 'Send Reply'}
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
 
 export default function SupportPage() {
   const { user } = useApp()
-  const isAdmin = user && ['admin', 'moderator'].includes(user.role)
+  const isAdmin = isStaff(user)
 
-  const [form, setForm]       = useState({ subject: '', category: 'Order Issue', priority: 'medium', message: '' })
+  const [form, setForm]       = useState(EMPTY_FORM)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError]     = useState('')
+
+  const [tickets, setTickets]               = useState([])
+  const [ticketsLoading, setTicketsLoading] = useState(true)
+  const [openTicket, setOpenTicket]         = useState(null)
+
+  const loadTickets = useCallback(() => {
+    apiFetch('/tickets')
+      .then(d => setTickets(Array.isArray(d) ? d : []))
+      .catch(() => setTickets([]))
+      .finally(() => setTicketsLoading(false))
+  }, [])
+
+  useEffect(() => { loadTickets() }, [loadTickets])
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
@@ -28,13 +120,16 @@ export default function SupportPage() {
       return
     }
     setLoading(true)
+    setError('')
     try {
-      await apiFetch('/support/tickets', {
+      const created = await apiFetch('/tickets', {
         method: 'POST',
         body: JSON.stringify(form),
       })
       setSuccess(true)
-      setForm({ subject: '', category: 'Order Issue', priority: 'medium', message: '' })
+      setForm(EMPTY_FORM)
+      setOpenTicket(created?.id ?? null)
+      loadTickets()
     } catch (err) {
       setError(err.message || 'Failed to submit ticket.')
     } finally {
@@ -78,7 +173,7 @@ export default function SupportPage() {
                   </svg>
                   <div>
                     <strong>Ticket submitted!</strong>
-                    <p>We'll review your request and get back to you shortly.</p>
+                    <p>We'll review your request and reply below, in “My Tickets”.</p>
                   </div>
                   <button className={styles.newTicketBtn} onClick={() => setSuccess(false)}>Open another</button>
                 </div>
@@ -99,7 +194,7 @@ export default function SupportPage() {
                     <div className={styles.fieldGroup}>
                       <label className={styles.label} htmlFor="category">Category</label>
                       <select id="category" name="category" className={styles.select} value={form.category} onChange={handleChange}>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
                     </div>
                     <div className={styles.fieldGroup}>
@@ -149,7 +244,7 @@ export default function SupportPage() {
                   <span className={styles.stepNum}>3</span>
                   <div>
                     <strong>Resolution</strong>
-                    <p>Check your ticket status in your wallet page under activity.</p>
+                    <p>Follow the replies and answer us in “My Tickets” on this page.</p>
                   </div>
                 </li>
               </ol>
@@ -158,7 +253,7 @@ export default function SupportPage() {
                 <p>For urgent matters, reach us directly:</p>
                 <div className={styles.contactBtns}>
                   <a
-                    href="https://t.me/BESTOFTHEBAYOGDM"
+                    href="https://t.me/BESTOFTHEBAYOGDM1"
                     target="_blank"
                     rel="noreferrer"
                     className={styles.telegramBtn}
@@ -182,6 +277,39 @@ export default function SupportPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className={styles.formCard} style={{ marginTop: 'var(--spacing-40)' }}>
+            <h2 className={styles.cardTitle}>My Tickets</h2>
+            {ticketsLoading ? (
+              <p className={styles.muted}>Loading…</p>
+            ) : tickets.length === 0 ? (
+              <p className={styles.muted}>You have no support tickets yet.</p>
+            ) : (
+              <ul className={styles.ticketList}>
+                {tickets.map(t => (
+                  <li key={t.id} className={styles.ticketItem}>
+                    <button
+                      type="button"
+                      className={styles.ticketHead}
+                      onClick={() => setOpenTicket(id => (id === t.id ? null : t.id))}
+                      aria-expanded={openTicket === t.id}
+                    >
+                      <span className={styles.ticketSubject}>
+                        <code>{t.frontendId}</code> {t.subject}
+                      </span>
+                      <span className={styles.ticketMeta}>
+                        <span className={styles.ticketStatus + ' ' + (styles[`status_${t.status}`] || '')}>
+                          {STATUS_LABEL[t.status] || t.status}
+                        </span>
+                        {new Date(t.updatedAt || t.createdAt).toLocaleDateString()}
+                      </span>
+                    </button>
+                    {openTicket === t.id && <TicketThread ticketId={t.id} onChanged={loadTickets} />}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>

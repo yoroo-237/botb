@@ -16,6 +16,8 @@ const DEPOSIT_STATUS = {
   pending:   { bg: '#e2e3f3', color: '#3d3d8f' },
 }
 const TIER_STATUS = {
+  basic:     { bg: '#e9ecef', color: '#495057' },
+  preferred: { bg: '#f5e6d8', color: '#8b4513' },
   bronze:   { bg: '#f5e6d8', color: '#8b4513' },
   silver:   { bg: '#e9ecef', color: '#495057' },
   gold:     { bg: '#fff3cd', color: '#856404' },
@@ -23,9 +25,11 @@ const TIER_STATUS = {
   diamond:  { bg: '#cce5ff', color: '#004085' },
 }
 const ROLE_STATUS = {
-  user:      { bg: '#e9ecef', color: '#495057' },
-  admin:     { bg: '#f8d7da', color: '#721c24' },
-  moderator: { bg: '#fff3cd', color: '#856404' },
+  user:       { bg: '#e9ecef', color: '#495057' },
+  customer:   { bg: '#e9ecef', color: '#495057' },
+  admin:      { bg: '#f8d7da', color: '#721c24' },
+  moderator:  { bg: '#fff3cd', color: '#856404' },
+  superadmin: { bg: '#e2e3f3', color: '#3d3d8f' },
 }
 const TXN_TYPES = {
   deposit:    { bg: '#d4edda', color: '#155724' },

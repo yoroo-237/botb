@@ -30,7 +30,9 @@ import AdminFaq from './pages/admin/AdminFaq.jsx'
 import AdminGiveaways from './pages/admin/AdminGiveaways.jsx'
 import AdminAnalytics from './pages/admin/AdminAnalytics.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
+import AdminSuperDashboard from './pages/admin/AdminSuperDashboard.jsx'
 import SupportPage from './pages/SupportPage/SupportPage.jsx'
+import { STAFF_ROLES } from './utils/roles.js'
 
 function LoadingScreen() {
   return (
@@ -54,7 +56,23 @@ function ProtectedRoute({ children, adminOnly = false }) {
   const location = useLocation()
   if (loadingAuth) return <LoadingScreen />
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
-  if (adminOnly && !['admin', 'moderator'].includes(user.role)) return <Navigate to="/" replace />
+  if (adminOnly && !STAFF_ROLES.includes(user.role)) return <Navigate to="/" replace />
+  return children
+}
+
+// Commission sweep panel — a plain admin passes AdminGuard but not this one
+function SuperAdminRoute({ children }) {
+  const { user } = useApp()
+  if (user?.role !== 'superadmin') {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1a1a2e' }}>Super admin access required</div>
+        <div style={{ color: '#888', fontSize: '0.875rem', marginTop: '6px' }}>
+          This section is restricted to super admin accounts.
+        </div>
+      </div>
+    )
+  }
   return children
 }
 
@@ -137,6 +155,7 @@ export default function App() {
               <Route path="giveaways" element={<AdminGiveaways />} />
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="super" element={<SuperAdminRoute><AdminSuperDashboard /></SuperAdminRoute>} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

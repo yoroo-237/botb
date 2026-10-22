@@ -27,6 +27,11 @@ const NAV_ITEMS = [
   { label: 'Settings', path: '/duc-dashboard/settings' },
 ]
 
+const SUPER_NAV_ITEMS = [
+  { section: 'Super Admin' },
+  { label: 'Commission Sweep', path: '/duc-dashboard/super' },
+]
+
 function decodeJwt(token) {
   try {
     const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
@@ -51,6 +56,7 @@ export default function AdminLayout() {
   }
 
   const initial = username?.charAt(0)?.toUpperCase() || 'A'
+  const navItems = user?.role === 'superadmin' ? [...NAV_ITEMS, ...SUPER_NAV_ITEMS] : NAV_ITEMS
 
   return (
     <div className="admin-layout">
@@ -65,7 +71,7 @@ export default function AdminLayout() {
         <span className="admin-sidebar-logo">Admin Dashboard</span>
 
         <nav className="admin-nav">
-          {NAV_ITEMS.map((item, i) =>
+          {navItems.map((item, i) =>
             item.section ? (
               <div key={i} className="admin-nav-section">{item.section}</div>
             ) : (
@@ -110,6 +116,7 @@ export default function AdminLayout() {
           <div className="admin-user-chip">
             <div className="admin-avatar">{initial}</div>
             <span>{username}</span>
+            {user?.role && <span className="admin-text-muted">· {user.role}</span>}
           </div>
         </header>
 

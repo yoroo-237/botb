@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminFetch } from './utils/api.js'
 import StatusBadge from '../../components/admin/StatusBadge.jsx'
+import { useApp } from '../../context/AppContext.jsx'
+import { isAdmin } from '../../utils/roles.js'
 
 const TABS = ['Profile', 'Orders', 'Transactions', 'Deposits', 'Tickets', 'API Keys']
 
@@ -20,6 +22,7 @@ function Modal({ title, onClose, children }) {
 export default function AdminUserDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user: actor } = useApp()
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('Profile')
@@ -360,9 +363,12 @@ export default function AdminUserDetail() {
                 value={editForm.role || 'customer'}
                 onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
               >
-                <option value="customer">Customer</option>
-                <option value="moderator">Moderator</option>
-                <option value="admin">Admin</option>
+                {/* The account's current role is always listed so saving never changes it by accident */}
+                {[...new Set([
+                  ...(actor?.role === 'superadmin' ? ['customer', 'moderator', 'admin', 'superadmin']
+                    : isAdmin(actor) ? ['customer', 'moderator', 'admin'] : ['customer']),
+                  user.role,
+                ])].map(r => <option key={r} value={r}>{r === 'superadmin' ? 'Super Admin' : r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
               </select>
             </div>
             <div className="admin-form-group">

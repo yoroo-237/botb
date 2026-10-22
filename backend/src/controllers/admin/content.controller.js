@@ -2,6 +2,10 @@ import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
 
+// "Blue Gumbo!" → "blue-gumbo" — used when the admin leaves the slug field empty
+const slugify = v => String(v || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const categoriesController = {
@@ -16,9 +20,8 @@ export const categoriesController = {
   async create(req, res) {
     const { name, slug, parentId } = req.body;
     if (!name?.trim()) throw appError('name is required', 400);
-    if (!slug?.trim()) throw appError('slug is required', 400);
     const cat = await prisma.category.create({
-      data: { name: name.trim(), slug: slug.trim().toLowerCase(), parentId: parentId ? parseInt(parentId, 10) : null },
+      data: { name: name.trim(), slug: slugify(slug?.trim() || name), parentId: parentId ? parseInt(parentId, 10) : null },
     });
     res.status(201).json(ok(cat));
   },
@@ -27,7 +30,7 @@ export const categoriesController = {
     const { name, slug, parentId } = req.body;
     const data = {};
     if (name     !== undefined) data.name     = name.trim();
-    if (slug     !== undefined) data.slug     = slug.trim().toLowerCase();
+    if (slug     !== undefined) data.slug     = slugify(slug.trim() || name);
     if (parentId !== undefined) data.parentId = parentId ? parseInt(parentId, 10) : null;
     const cat = await prisma.category.update({ where: { id: parseInt(req.params.id, 10) }, data });
     res.json(ok(cat));
@@ -53,9 +56,8 @@ export const brandsController = {
   async create(req, res) {
     const { name, slug, logoUrl } = req.body;
     if (!name?.trim()) throw appError('name is required', 400);
-    if (!slug?.trim()) throw appError('slug is required', 400);
     const brand = await prisma.brand.create({
-      data: { name: name.trim(), slug: slug.trim().toLowerCase(), logoUrl: logoUrl || null },
+      data: { name: name.trim(), slug: slugify(slug?.trim() || name), logoUrl: logoUrl || null },
     });
     res.status(201).json(ok(brand));
   },
@@ -64,7 +66,7 @@ export const brandsController = {
     const { name, slug, logoUrl } = req.body;
     const data = {};
     if (name    !== undefined) data.name    = name.trim();
-    if (slug    !== undefined) data.slug    = slug.trim().toLowerCase();
+    if (slug    !== undefined) data.slug    = slugify(slug.trim() || name);
     if (logoUrl !== undefined) data.logoUrl = logoUrl || null;
     const brand = await prisma.brand.update({ where: { id: parseInt(req.params.id, 10) }, data });
     res.json(ok(brand));
@@ -87,11 +89,11 @@ export const newsController = {
   async create(req, res) {
     const { title, slug, content, imageUrl, isPublished = false } = req.body;
     if (!title?.trim())   throw appError('title is required', 400);
-    if (!slug?.trim())    throw appError('slug is required', 400);
     if (!content?.trim()) throw appError('content is required', 400);
+    // Unique slug: the title alone can repeat between articles
     const article = await prisma.newsArticle.create({
       data: {
-        title: title.trim(), slug: slug.trim(), content: content.trim(),
+        title: title.trim(), slug: slugify(slug?.trim() || title) + (slug?.trim() ? '' : `-${Date.now().toString(36)}`), content: content.trim(),
         imageUrl: imageUrl || null, isPublished: Boolean(isPublished),
         publishedAt: isPublished ? new Date() : null,
       },
@@ -103,7 +105,7 @@ export const newsController = {
     const { title, slug, content, imageUrl, isPublished } = req.body;
     const data = {};
     if (title       !== undefined) data.title       = title.trim();
-    if (slug        !== undefined) data.slug        = slug.trim();
+    if (slug        !== undefined && slug.trim()) data.slug = slugify(slug);
     if (content     !== undefined) data.content     = content.trim();
     if (imageUrl    !== undefined) data.imageUrl    = imageUrl || null;
     if (isPublished !== undefined) {

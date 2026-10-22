@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useCart } from '../../context/CartContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import MiniCart from '../MiniCart/MiniCart.jsx'
+import { isStaff } from '../../utils/roles.js'
 import styles from './Header.module.css'
 
 const NAV = [
@@ -76,7 +77,7 @@ export default function Header() {
   function handleSearch(e) {
     e.preventDefault()
     const q = searchRef.current?.value?.trim()
-    if (q) navigate(`/?s=${encodeURIComponent(q)}`)
+    navigate(q ? `/?s=${encodeURIComponent(q)}` : '/')
   }
 
   return (
@@ -157,18 +158,24 @@ export default function Header() {
               onMouseEnter={() => setUserMenuOpen(true)}
               onMouseLeave={() => setUserMenuOpen(false)}
             >
-              <button className={styles.userButton} aria-label="Mon compte">
+              <button
+                className={styles.userButton}
+                aria-label="My account"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen(true)}
+              >
                 <UserIcon />
                 <span className={styles.username}>{user.username}</span>
               </button>
               <ul className={styles.userDropdown + (userMenuOpen ? ' ' + styles.submenuOpen : '')}>
-                <li><Link to="/profile" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Mon Profil</Link></li>
+                <li><Link to="/profile" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>My Profile</Link></li>
                 <li><Link to="/wallet" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Wallet · ${balance.toFixed(2)}</Link></li>
-                {user.role === 'admin' && (
+                <li><Link to="/support" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Support</Link></li>
+                {isStaff(user) && (
                   <li><Link to="/duc-dashboard" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Admin</Link></li>
                 )}
                 <li>
-                  <button className={styles.logoutBtn} onClick={logout}>Déconnexion</button>
+                  <button className={styles.logoutBtn} onClick={logout}>Log Out</button>
                 </li>
               </ul>
             </div>
@@ -238,12 +245,13 @@ export default function Header() {
                 <li className={styles.mobileNavItem + ' ' + styles.mobileDivider}>
                   {user ? (
                     <>
-                      <Link to="/profile" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Mon Profil</Link>
+                      <Link to="/profile" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>My Profile</Link>
                       <Link to="/wallet" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Wallet · ${balance.toFixed(2)}</Link>
-                      {user.role === 'admin' && (
+                      <Link to="/support" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Support</Link>
+                      {isStaff(user) && (
                         <Link to="/duc-dashboard" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Admin</Link>
                       )}
-                      <button className={styles.mobileLogoutBtn} onClick={() => { setMobileOpen(false); logout() }}>Déconnexion</button>
+                      <button className={styles.mobileLogoutBtn} onClick={() => { setMobileOpen(false); logout() }}>Log Out</button>
                     </>
                   ) : (
                     <Link to="/login" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Sign In</Link>

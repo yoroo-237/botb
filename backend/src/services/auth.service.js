@@ -11,6 +11,10 @@ export const authService = {
     if (!username || username.trim().length < 3) throw appError('Username too short (min 3 characters)', 400);
     if (!password || password.length < 6)         throw appError('Password too short (min 6 characters)', 400);
 
+    // Admin → Settings → General → Registration Open
+    const registration = await prisma.siteSetting.findUnique({ where: { key: 'registration_open' } });
+    if (registration?.value === 'false') throw appError('Registrations are currently closed', 403);
+
     const exists = await prisma.user.findUnique({ where: { username: username.trim() } });
     if (exists) throw appError('Username already taken', 409);
 

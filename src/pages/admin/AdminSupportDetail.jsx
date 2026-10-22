@@ -57,8 +57,10 @@ export default function AdminSupportDetail() {
     }
   }
 
+  const isClosed = ['resolved', 'closed'].includes(ticket?.status)
+
   async function toggleStatus() {
-    const newStatus = ticket?.status === 'open' ? 'closed' : 'open'
+    const newStatus = isClosed ? 'open' : 'closed'
     setStatusLoading(true)
     try {
       await adminFetch(`/admin/support/tickets/${id}/status`, {
@@ -91,19 +93,21 @@ export default function AdminSupportDetail() {
           </button>
           <h1 className="admin-page-title">{ticket.subject}</h1>
           <p className="admin-page-subtitle">
-            From: <strong>{ticket.user?.username || '—'}</strong> · {formatDate(ticket.createdAt)}
+            From: <strong>{ticket.user?.username || '—'}</strong>
+            {ticket.user?.telegramHandle && <> (TG {ticket.user.telegramHandle})</>}
+            {' '}· {ticket.category} · {ticket.priority} priority · {formatDate(ticket.createdAt)}
           </p>
         </div>
         <div className="admin-gap-actions">
-          <span className="admin-badge" style={{ background: ticket.status === 'open' ? '#d4edda' : '#e9ecef', color: ticket.status === 'open' ? '#155724' : '#6c757d' }}>
-            {ticket.status || 'open'}
+          <span className="admin-badge" style={{ background: isClosed ? '#e9ecef' : '#d4edda', color: isClosed ? '#6c757d' : '#155724' }}>
+            {(ticket.status || 'open').replace('_', ' ')}
           </span>
           <button
-            className={'admin-btn admin-btn-sm ' + (ticket.status === 'open' ? 'admin-btn-danger' : 'admin-btn-success')}
+            className={'admin-btn admin-btn-sm ' + (isClosed ? 'admin-btn-success' : 'admin-btn-danger')}
             onClick={toggleStatus}
             disabled={statusLoading}
           >
-            {ticket.status === 'open' ? 'Close Ticket' : 'Reopen Ticket'}
+            {isClosed ? 'Reopen Ticket' : 'Close Ticket'}
           </button>
         </div>
       </div>
@@ -141,6 +145,9 @@ export default function AdminSupportDetail() {
       {/* Reply form */}
       <div className="admin-card">
         <h2 className="admin-card-title">Reply</h2>
+        {isClosed ? (
+          <p className="admin-text-muted" style={{ margin: 0 }}>This ticket is {ticket.status}. Reopen it to reply.</p>
+        ) : (
         <form onSubmit={sendReply}>
           <div className="admin-form-group">
             <textarea
@@ -155,6 +162,7 @@ export default function AdminSupportDetail() {
             {sending ? 'Sending…' : 'Send Reply'}
           </button>
         </form>
+        )}
       </div>
     </div>
   )

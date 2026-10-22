@@ -3,8 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { adminFetch } from './utils/api.js'
 import StatusBadge from '../../components/admin/StatusBadge.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
+import { useApp } from '../../context/AppContext.jsx'
+import { isAdmin } from '../../utils/roles.js'
 
-function CreateUserModal({ onClose, onCreated }) {
+// Roles the current account may hand out (mirrors assertCanAssignRole in the backend)
+function roleOptions(actor) {
+  if (actor?.role === 'superadmin') return ['customer', 'moderator', 'admin', 'superadmin']
+  if (isAdmin(actor)) return ['customer', 'moderator', 'admin']
+  return ['customer']
+}
+const roleLabel = r => (r === 'superadmin' ? 'Super Admin' : r.charAt(0).toUpperCase() + r.slice(1))
+
+function CreateUserModal({ actor, onClose, onCreated }) {
   const [form, setForm] = useState({ username: '', password: '', role: 'customer' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -42,9 +52,7 @@ function CreateUserModal({ onClose, onCreated }) {
           <div className="admin-form-group">
             <label className="admin-label">Role</label>
             <select className="admin-select" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-              <option value="customer">Customer</option>
-              <option value="moderator">Moderator</option>
-              <option value="admin">Admin</option>
+              {roleOptions(actor).map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
             </select>
           </div>
           <div className="admin-modal-actions">
@@ -61,6 +69,7 @@ function CreateUserModal({ onClose, onCreated }) {
 
 export default function AdminUsers() {
   const navigate = useNavigate()
+  const { user: actor } = useApp()
   const [users, setUsers] = useState([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -100,10 +109,10 @@ export default function AdminUsers() {
   async function handleRoleChange(userId, newRole) {
     try {
       await adminFetch(`/admin/users/${userId}`, { method: 'PUT', body: JSON.stringify({ role: newRole }) })
-      fetchUsers()
     } catch (err) {
       alert(err.message)
     }
+    fetchUsers()
   }
 
   async function handleBanToggle(user) {
@@ -195,16 +204,18 @@ export default function AdminUsers() {
                     </div>
                   </td>
                   <td>
-                    <select
-                      className="admin-select"
-                      style={{ padding: '2px 6px', fontSize: '0.75rem', height: 'auto' }}
-                      value={u.role}
-                      onChange={e => handleRoleChange(u.id, e.target.value)}
-                    >
-                      <option value="customer">Customer</option>
-                      <option value="moderator">Moderator</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    {roleOptions(actor).includes(u.role) && u.id !== actor?.id ? (
+                      <select
+                        className="admin-select"
+                        style={{ padding: '2px 6px', fontSize: '0.75rem', height: 'auto' }}
+                        value={u.role}
+                        onChange={e => handleRoleChange(u.id, e.target.value)}
+                      >
+                        {roleOptions(actor).map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                      </select>
+                    ) : (
+                      <StatusBadge type="role" value={u.role} />
+                    )}
                   </td>
                   <td><StatusBadge type="tier" value={u.tier} /></td>
                   <td>${Number(u.balance || 0).toFixed(2)}</td>
@@ -247,7 +258,7 @@ export default function AdminUsers() {
       </div>
 
       {showCreate && (
-        <CreateUserModal onClose={() => setShowCreate(false)} onCreated={fetchUsers} />
+        <CreateUserModal actor={actor} onClose={() => setShowCreate(false)} onCreated={fetchUsers} />
       )}
     </div>
   )

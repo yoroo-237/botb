@@ -22,7 +22,7 @@ export default function AdminNews() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ title: '', content: '', published: false })
+  const [form, setForm] = useState({ title: '', content: '', isPublished: false })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -30,15 +30,15 @@ export default function AdminNews() {
     setLoading(true)
     try {
       const data = await adminFetch('/admin/news')
-      setItems(data.news || data || [])
+      setItems(Array.isArray(data) ? data : [])
     } catch { setItems([]) }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
-  function openCreate() { setForm({ title: '', content: '', published: false }); setModal({ mode: 'create' }); setError('') }
-  function openEdit(item) { setForm({ title: item.title, content: item.content, published: !!item.published }); setModal({ mode: 'edit', item }); setError('') }
+  function openCreate() { setForm({ title: '', content: '', isPublished: false }); setModal({ mode: 'create' }); setError('') }
+  function openEdit(item) { setForm({ title: item.title, content: item.content, isPublished: !!item.isPublished }); setModal({ mode: 'edit', item }); setError('') }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -91,11 +91,11 @@ export default function AdminNews() {
                 <tr key={item.id}>
                   <td><strong>{item.title}</strong></td>
                   <td>
-                    <span className="admin-badge" style={{ background: item.published ? '#d4edda' : '#e9ecef', color: item.published ? '#155724' : '#6c757d' }}>
-                      {item.published ? 'Published' : 'Draft'}
+                    <span className="admin-badge" style={{ background: item.isPublished ? '#d4edda' : '#e9ecef', color: item.isPublished ? '#155724' : '#6c757d' }}>
+                      {item.isPublished ? 'Published' : 'Draft'}
                     </span>
                   </td>
-                  <td>{formatDate(item.createdAt)}</td>
+                  <td>{formatDate(item.publishedAt || item.createdAt)}</td>
                   <td>
                     <div className="admin-gap-actions">
                       <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openEdit(item)}>Edit</button>
@@ -123,7 +123,7 @@ export default function AdminNews() {
             </div>
             <div className="admin-form-group">
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.published} onChange={e => setForm(f => ({ ...f, published: e.target.checked }))} />
+                <input type="checkbox" checked={form.isPublished} onChange={e => setForm(f => ({ ...f, isPublished: e.target.checked }))} />
                 <span className="admin-label" style={{ margin: 0 }}>Published</span>
               </label>
             </div>

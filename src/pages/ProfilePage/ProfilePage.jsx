@@ -9,7 +9,7 @@ const SECTIONS = [
     title: 'Private Details',
     fields: [
       { name: 'username', label: 'Username', readOnly: true },
-      { name: 'markup', label: 'Markup %', type: 'number' },
+      { name: 'markupPct', label: 'Markup %', readOnly: true },
     ],
   },
   {
@@ -36,7 +36,6 @@ const SECTIONS = [
     key: 'telegram',
     title: 'Telegram Details',
     fields: [{ name: 'telegramHandle', label: 'Telegram Handle' }],
-    hasTelegramBtn: true,
   },
 ]
 
@@ -84,11 +83,11 @@ function ProfileSection({ section, profileData, onSave }) {
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
         <h3 className={styles.sectionTitle}>{section.title}</h3>
-        {!editing ? (
+        {!section.fields.some(f => !f.readOnly) ? null : !editing ? (
           <button className={styles.editBtn} onClick={startEdit}>Edit</button>
         ) : (
           <div className={styles.btnActions}>
-            <button className={styles.cancelBtn} onClick={() => { setEditing(false); setSuccess('') }}>Cancel</button>
+            <button className={styles.cancelBtn} onClick={() => { setEditing(false); setSuccess(''); setError('') }}>Cancel</button>
             <button className={styles.saveBtn} onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
             </button>
@@ -112,17 +111,14 @@ function ProfileSection({ section, profileData, onSave }) {
             />
           ) : (
             <span className={styles.fieldValue + (field.readOnly ? ' ' + styles.readOnly : '')}>
-              {profileData?.[field.name] || <em style={{ color: '#bbb' }}>Not set</em>}
+              {profileData?.[field.name] != null && profileData[field.name] !== ''
+                ? String(profileData[field.name])
+                : <em style={{ color: '#bbb' }}>Not set</em>}
             </span>
           )}
         </div>
       ))}
 
-      {section.hasTelegramBtn && (
-        <button className={styles.telegramBtn} onClick={() => alert('Telegram linking coming soon')}>
-          Auto-Link Account
-        </button>
-      )}
     </div>
   )
 }
@@ -166,11 +162,11 @@ export default function ProfilePage() {
             <div className={styles.userInfo}>
               <div className={styles.username}>{user?.username || 'User'}</div>
               <div className={styles.meta}>
-                {user?.tier && (
-                  <span className={styles.tierBadge}>{user.tier}</span>
+                {profileData?.tier && (
+                  <span className={styles.tierBadge}>{profileData.tier}</span>
                 )}
                 <span className={styles.balanceChip}>${balance.toFixed(2)} balance</span>
-                {user?.role && user.role !== 'user' && (
+                {user?.role && !['user', 'customer'].includes(user.role) && (
                   <span className={styles.tierBadge} style={{ background: 'rgba(255,100,0,0.4)' }}>
                     {user.role}
                   </span>

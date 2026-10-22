@@ -132,13 +132,13 @@ export default function CartPage() {
             <div className={styles.summaryRow}>
               <span className={styles.summaryLabel}>Shipping</span>
               <div className={styles.shippingInfo}>
-                <span>Free shipping</span>
-                <small className={styles.shippingNote}>Shipping to NY.</small>
+                <span>Calculated at checkout</span>
+                <small className={styles.shippingNote}>Paid from your wallet balance.</small>
               </div>
             </div>
 
             <div className={styles.summaryRow + ' ' + styles.totalRow}>
-              <span className={styles.summaryLabel}>Total</span>
+              <span className={styles.summaryLabel}>Total (before shipping)</span>
               <span className={styles.totalValue}>{formatPrice(subtotal)}</span>
             </div>
 

@@ -247,3 +247,66 @@
 
 .signalBtn { background: #3a76f0; }
 .signalBtn:hover { background: #2c5fd4; text-decoration: none; }
+
+/* My tickets */
+.muted { color: var(--color-accent-4); font-size: var(--font-size-small); margin: 0; }
+.ticketList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ticketItem {
+  border: 1px solid color-mix(in srgb, var(--color-contrast) 10%, transparent);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ticketHead {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  color: var(--color-contrast);
+  font-family: var(--font-family);
+  font-size: var(--font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+.ticketHead:hover { background: color-mix(in srgb, var(--color-contrast) 4%, transparent); }
+.ticketSubject { font-weight: 600; min-width: 0; word-break: break-word; }
+.ticketSubject code { color: var(--color-accent-4); font-weight: 400; margin-right: 6px; }
+.ticketMeta { display: inline-flex; align-items: center; gap: 10px; color: var(--color-accent-4); white-space: nowrap; }
+.ticketStatus {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-contrast) 8%, transparent);
+  color: var(--color-contrast);
+}
+.status_open { background: #dcfce7; color: #166534; }
+.status_in_progress { background: #dbeafe; color: #1e40af; }
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 16px 16px;
+}
+.message {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-contrast) 5%, transparent);
+  max-width: 85%;
+  align-self: flex-start;
+}
+.messageStaff {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--color-accent-3) 14%, transparent);
+}
+.messageMeta { font-size: 0.75rem; color: var(--color-accent-4); margin-bottom: 4px; }
+.messageText { font-size: var(--font-size-small); color: var(--color-contrast); white-space: pre-wrap; word-break: break-word; }
+
+@media (max-width: 600px) {
+  .formCard, .infoCard { padding: 20px 16px; }
+  .message { max-width: 100%; }
+}

@@ -4,10 +4,11 @@ import { adminFetch } from './utils/api.js'
 import StatusBadge from '../../components/admin/StatusBadge.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
 
-const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'refunded']
+// Must match VALID_STATUSES in backend/src/controllers/admin/orders.controller.js
+const ORDER_STATUSES = ['processing', 'shipped', 'delivered', 'cancelled', 'refunded']
 
 function UpdateStatusModal({ order, onClose, onUpdated }) {
-  const [status, setStatus] = useState(order.status || 'pending')
+  const [status, setStatus] = useState(order.status || 'processing')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -84,8 +85,8 @@ export default function AdminOrders() {
       if (status) params.set('status', status)
       const data = await adminFetch(`/admin/orders?${params}`)
       if (requestId !== requestIdRef.current) return
-      setOrders(data.orders || data || [])
-      setTotalPages(data.totalPages || 1)
+      setOrders(data.orders || [])
+      setTotalPages(data.pagination?.totalPages || 1)
     } catch {
       if (requestId === requestIdRef.current) setOrders([])
     } finally {
@@ -148,11 +149,11 @@ export default function AdminOrders() {
                 <tr key={o.id}>
                   <td><span className="admin-code">#{o.orderNumber || o.id}</span></td>
                   <td>{o.user?.username || o.name || '—'}</td>
-                  <td>{o.items?.length ?? o.itemCount ?? '—'}</td>
-                  <td>${Number(o.total || 0).toFixed(2)}</td>
+                  <td>{o.items ? o.items.reduce((n, i) => n + i.quantity, 0) : '—'}</td>
+                  <td>${Number(o.totalAmount || 0).toFixed(2)}</td>
                   <td>{o.paymentMethod || '—'}</td>
                   <td><StatusBadge type="status" value={o.status} /></td>
-                  <td>{formatDate(o.createdAt)}</td>
+                  <td>{formatDate(o.placedAt)}</td>
                   <td>
                     <div className="admin-gap-actions">
                       <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => navigate(`/duc-dashboard/orders/${o.id}`)}>View</button>

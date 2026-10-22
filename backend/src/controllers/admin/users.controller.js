@@ -5,6 +5,26 @@ import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { getUserTier, appError } from '../../utils/formatters.js';
 
+const VALID_ROLES = ['customer', 'moderator', 'admin', 'superadmin'];
+const isAdminRole = role => ['admin', 'superadmin'].includes(role);
+
+// Who may give `role` to an account: staff roles need an admin, and only a super
+// admin can create another super admin (or demote one).
+function assertCanAssignRole(actor, role) {
+  if (!VALID_ROLES.includes(role)) throw appError(`Invalid role. Valid values: ${VALID_ROLES.join(', ')}`, 400);
+  if (role === 'superadmin' && actor.role !== 'superadmin') throw appError('Only a super admin can grant the super admin role', 403);
+  if (role !== 'customer' && !isAdminRole(actor.role)) throw appError('Only an admin can grant staff roles', 403);
+}
+
+// A super admin account can only be modified by a super admin.
+async function assertCanModify(actor, userId) {
+  const target = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+  if (target.role === 'superadmin' && actor.role !== 'superadmin') {
+    throw appError('This account can only be modified by a super admin', 403);
+  }
+  return target;
+}
+
 export const adminUsersController = {
   async list(req, res) {
     const { page, limit, skip } = parsePaginationParams(req.query);
@@ -51,6 +71,7 @@ export const adminUsersController = {
     const { username, password, role = 'customer' } = req.body;
     if (!username?.trim()) throw appError('Username is required', 400);
     if (!password || password.length < 6) throw appError('Password is required (min 6 characters)', 400);
+    assertCanAssignRole(req.user, role);
 
     const exists = await prisma.user.findUnique({ where: { username: username.trim() } });
     if (exists) throw appError('Username already taken', 409);
@@ -81,6 +102,8 @@ export const adminUsersController = {
   async update(req, res) {
     const id = parseInt(req.params.id, 10);
     const { username, role, isActive, markupPct } = req.body;
+    const target = await assertCanModify(req.user, id);
+    if (role !== undefined && role !== target.role) assertCanAssignRole(req.user, role);
     const data = {};
     if (username  !== undefined) data.username  = username.trim();
     if (role      !== undefined) data.role      = role;
@@ -92,6 +115,8 @@ export const adminUsersController = {
 
   async ban(req, res) {
     const id   = parseInt(req.params.id, 10);
+    await assertCanModify(req.user, id);
+    if (id === req.user.sub) throw appError('You cannot ban your own account', 400);
     const user = await prisma.user.findUniqueOrThrow({ where: { id } });
     const updated = await prisma.user.update({
       where: { id },
@@ -104,6 +129,7 @@ export const adminUsersController = {
     const id = parseInt(req.params.id, 10);
     const { password } = req.body;
     if (!password || password.length < 6) throw appError('Password too short (min 6 characters)', 400);
+    await assertCanModify(req.user, id);
     const passwordHash = await bcrypt.hash(password, 12);
     await prisma.user.update({ where: { id }, data: { passwordHash } });
     res.json(ok({ message: 'Password updated' }));
@@ -112,6 +138,7 @@ export const adminUsersController = {
   async adjustWallet(req, res) {
     const id = parseInt(req.params.id, 10);
     const { type, amount, reason } = req.body;
+    await assertCanModify(req.user, id);
     const txn = await walletService.adjustBalance(id, type, parseFloat(amount), reason);
     const user = await prisma.user.findUnique({ where: { id }, select: { balance: true } });
     res.json(ok({ transaction: txn, newBalance: Number(user.balance) }));
@@ -119,6 +146,8 @@ export const adminUsersController = {
 
   async remove(req, res) {
     const id = parseInt(req.params.id, 10);
+    await assertCanModify(req.user, id);
+    if (id === req.user.sub) throw appError('You cannot delete your own account', 400);
 
     await prisma.$transaction(async (tx) => {
       // Nullify Deposit→Transaction FK before deleting transactions
