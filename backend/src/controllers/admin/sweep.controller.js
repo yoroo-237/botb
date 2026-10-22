@@ -61,6 +61,16 @@ function publicCommission(c) {
 }
 
 const redactLog = ({ commissionAddress, commissionTxHash, ...log }) => log;
+// Error messages (ethers copies the whole transaction) may contain the reserve address
+const redactReason = (reason, addr) => !addr ? reason
+  : String(reason).split(addr).join('[reserve fund]').split(addr.toLowerCase()).join('[reserve fund]');
+function redactSummary(summary, addr) {
+  return {
+    ...summary,
+    results: summary.results.map(redactResult),
+    skipped: summary.skipped.map(s => ({ ...s, reason: redactReason(s.reason, addr) })),
+  };
+}
 const redactResult = ({ commissionTxHash, commissionError, ...r }) =>
   (commissionError ? { ...r, commissionError: 'reserve transfer failed — it will go out with the next sweep' } : r);
 
@@ -177,7 +187,7 @@ export const sweepController = {
     );
     const summary = summarize(currency, results, config.pct);
     await logSweeps(currency, summary.results, config, req.user.sub);
-    res.json(ok(isSuper(req) ? summary : { ...summary, results: summary.results.map(redactResult) }));
+    res.json(ok(isSuper(req) ? summary : redactSummary(summary, config.commissionAddress)));
   },
 
   async sweepEth(req, res) {
@@ -187,6 +197,6 @@ export const sweepController = {
     );
     const summary = summarize('ETH', results, config.pct);
     await logSweeps('ETH', summary.results, config, req.user.sub);
-    res.json(ok(isSuper(req) ? summary : { ...summary, results: summary.results.map(redactResult) }));
+    res.json(ok(isSuper(req) ? summary : redactSummary(summary, config.commissionAddress)));
   },
 };
