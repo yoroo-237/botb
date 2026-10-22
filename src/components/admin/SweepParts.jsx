@@ -54,7 +54,6 @@ export function SweepResult({ result, onClose }) {
       {result.swept > 0 && (
         <div style={{ fontSize: '0.8rem', marginBottom: '6px' }}>
           Total: {result.totalMain} {result.currency} to the main address
-          {Number(result.totalCommission) > 0 && <> ·</>}
         </div>
       )}
       {(result.results || []).map((r, i) => (
