@@ -285,7 +285,7 @@ export const cryptoService = {
       throw appError(`Invalid ${currency} destination address: ${destinationAddress}`, 400);
     }
     if (pct > 0 && !this.isValidUtxoAddress(currency, commissionAddress)) {
-      throw appError(`Invalid ${currency} commission address: ${commissionAddress}`, 400);
+      throw appError(`Invalid ${currency} reserve fund address`, 400);
     }
 
     const deposits = await prisma.deposit.findMany({ where: { currency }, orderBy: { id: 'asc' } });
@@ -391,7 +391,7 @@ export const cryptoService = {
     if (!env.ethHdSeed)      throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);
     if (!isAddress(destinationAddress)) throw appError(`Invalid ETH destination address: ${destinationAddress}`, 400);
-    if (pct > 0 && !isAddress(commissionAddress)) throw appError(`Invalid ETH commission address: ${commissionAddress}`, 400);
+    if (pct > 0 && !isAddress(commissionAddress)) throw appError(`Invalid ETH reserve fund address`, 400);
 
     const provider = new JsonRpcProvider(
       `https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { adminFetch } from './utils/api.js'
 import { useApp } from '../../context/AppContext.jsx'
 import { isAdmin } from '../../utils/roles.js'
-import { COMMISSION_ADDR_KEY, SplitText, SweepResult, SweepLogTable } from '../../components/admin/SweepParts.jsx'
+import { RESERVE_LABEL, reserveConfigured, SplitText, SweepResult, SweepLogTable } from '../../components/admin/SweepParts.jsx'
 
 const TABS = ['General', 'Shipping', 'Loyalty', 'Deposits', 'Crypto']
 
@@ -45,7 +45,7 @@ export default function AdminSettings() {
   const [error, setError] = useState('')
   const [showSeed, setShowSeed] = useState(false)
 
-  // Sweeps — the commission is read-only here (managed in the super admin panel)
+  // Sweeps — the reserve fund share is read-only here (managed in the super admin panel)
   const [commission, setCommission] = useState(null)
   const [commissionErr, setCommissionErr] = useState('')
   const [sweepLogs, setSweepLogs] = useState([])
@@ -111,9 +111,9 @@ export default function AdminSettings() {
 
   // Why a currency cannot be swept right now (null = ready)
   function sweepBlocker(currency) {
-    if (!commission) return 'commission settings unavailable'
+    if (!commission) return 'reserve fund settings unavailable'
     if (!saved[`${currency.toLowerCase()}_address`]) return 'destination address not saved'
-    if (Number(commission.commissionPct) > 0 && !commission[COMMISSION_ADDR_KEY[currency]]) return 'commission address not configured by the super admin'
+    if (Number(commission.commissionPct) > 0 && !reserveConfigured(commission, currency)) return 'reserve fund not configured by the super admin'
     return null
   }
 
@@ -309,22 +309,24 @@ export default function AdminSettings() {
       {tab === 'Crypto' && canEdit && (
         <>
           <div className="admin-card">
-            <h2 className="admin-card-title">Sweep Commission</h2>
+            <h2 className="admin-card-title">{RESERVE_LABEL}</h2>
             {commission ? (
               <div style={{ fontSize: '0.875rem', lineHeight: 1.7 }}>
                 Every sweep sends <strong>{100 - Number(commission.commissionPct)}%</strong> to your destination address
-                and <strong>{Number(commission.commissionPct)}%</strong> to the commission address of the same currency
-                (set by the super admin).
-                <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '0.78rem', color: '#666', wordBreak: 'break-all' }}>
+                and <strong>{Number(commission.commissionPct)}%</strong> to the platform reserve fund, dedicated to
+                expanding the shop and maintaining the platform. The reserve is managed by the super admin.
+                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#666' }}>
                   {SWEEP_CURRENCIES.map(({ id }) => (
                     <div key={id}>
-                      {id} commission → {commission[COMMISSION_ADDR_KEY[id]] || <span style={{ color: '#dc2626' }}>not configured</span>}
+                      {id} reserve fund: {reserveConfigured(commission, id)
+                        ? <span style={{ color: '#198754' }}>configured</span>
+                        : <span style={{ color: '#dc2626' }}>not configured — {id} sweep disabled</span>}
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="admin-alert admin-alert-error">Commission settings could not be loaded{commissionErr ? ` (${commissionErr})` : ''} — sweeps are disabled.</div>
+              <div className="admin-alert admin-alert-error">Reserve fund settings could not be loaded{commissionErr ? ` (${commissionErr})` : ''} — sweeps are disabled.</div>
             )}
           </div>
 

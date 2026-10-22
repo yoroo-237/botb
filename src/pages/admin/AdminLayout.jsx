@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 
 const SUPER_NAV_ITEMS = [
   { section: 'Super Admin' },
-  { label: 'Commission Sweep', path: '/duc-dashboard/super' },
+  { label: 'Reserve Fund', path: '/duc-dashboard/super' },
 ]
 
 function decodeJwt(token) {

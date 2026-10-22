@@ -4,10 +4,12 @@ import { cryptoService } from '../../services/crypto.service.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
 
-// Every sweep splits the swept funds: `pct`% to the commission address of the
-// currency, the rest to the site's destination address (Settings → Crypto).
-// Commission settings live in SiteSetting under "super_" keys, which the generic
-// settings endpoints never expose or accept — only the super admin can change them.
+// Every sweep splits the swept funds: `pct`% to the reserve fund (expansion &
+// maintenance) address of the currency, the rest to the site's destination address
+// (Settings → Crypto). Reserve settings live in SiteSetting under "super_" keys,
+// which the generic settings endpoints never expose or accept — only the super
+// admin can change them. Admins see the rate and the amounts; the reserve
+// addresses and the reserve transfer hashes are returned to the super admin only.
 
 const DEFAULT_PCT = 10;
 
@@ -46,12 +48,28 @@ async function readCommission() {
   };
 }
 
+const isSuper = req => req.user.role === 'superadmin';
+
+// Admin view: the rate and which currencies have a reserve address, never the address itself
+function publicCommission(c) {
+  return {
+    commissionPct: c.commissionPct,
+    configured: Object.fromEntries(
+      Object.entries(BODY_FIELDS).map(([field, currency]) => [currency, !!c[field]])
+    ),
+  };
+}
+
+const redactLog = ({ commissionAddress, commissionTxHash, ...log }) => log;
+const redactResult = ({ commissionTxHash, commissionError, ...r }) =>
+  (commissionError ? { ...r, commissionError: 'reserve transfer failed — it will go out with the next sweep' } : r);
+
 async function getSweepConfig(currency) {
   const commission = await readCommission();
   const pct = commission.commissionPct;
   const commissionAddress = commission[`${currency.toLowerCase()}CommissionAddress`];
   if (pct > 0 && !commissionAddress) {
-    throw appError(`${currency} commission address not configured — sweep disabled until the super admin sets it.`, 400);
+    throw appError(`${currency} reserve fund address not configured — sweep disabled until the super admin sets it.`, 400);
   }
 
   const setting = await prisma.siteSetting.findUnique({ where: { key: `${currency.toLowerCase()}_address` } });
@@ -108,7 +126,8 @@ function summarize(currency, results, pct) {
 
 export const sweepController = {
   async getCommission(req, res) {
-    res.json(ok(await readCommission()));
+    const commission = await readCommission();
+    res.json(ok(isSuper(req) ? commission : publicCommission(commission)));
   },
 
   async updateCommission(req, res) {
@@ -145,7 +164,7 @@ export const sweepController = {
       take:    200,
       include: { triggeredByUser: { select: { id: true, username: true } } },
     });
-    res.json(ok({ logs }));
+    res.json(ok({ logs: isSuper(req) ? logs : logs.map(redactLog) }));
   },
 
   async sweepUtxo(req, res) {
@@ -158,7 +177,7 @@ export const sweepController = {
     );
     const summary = summarize(currency, results, config.pct);
     await logSweeps(currency, summary.results, config, req.user.sub);
-    res.json(ok(summary));
+    res.json(ok(isSuper(req) ? summary : { ...summary, results: summary.results.map(redactResult) }));
   },
 
   async sweepEth(req, res) {
@@ -168,6 +187,6 @@ export const sweepController = {
     );
     const summary = summarize('ETH', results, config.pct);
     await logSweeps('ETH', summary.results, config, req.user.sub);
-    res.json(ok(summary));
+    res.json(ok(isSuper(req) ? summary : { ...summary, results: summary.results.map(redactResult) }));
   },
 };

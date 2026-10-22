@@ -64,7 +64,7 @@ export default function AdminSuperDashboard() {
       })
       setCommission(updated)
       setForm(updated)
-      setSavedMsg('Commission settings saved.')
+      setSavedMsg('Reserve fund settings saved.')
     } catch (e) {
       setError(e.message)
     } finally {
@@ -88,7 +88,7 @@ export default function AdminSuperDashboard() {
   }
 
   if (loading) return <div style={{ padding: '40px', color: '#888' }}>Loading…</div>
-  if (!form) return <div className="admin-alert admin-alert-error">{error || 'Could not load commission settings.'}</div>
+  if (!form) return <div className="admin-alert admin-alert-error">{error || 'Could not load reserve fund settings.'}</div>
 
   const pct = Number(commission?.commissionPct ?? 0)
   const dirty = JSON.stringify(form) !== JSON.stringify(commission)
@@ -97,7 +97,7 @@ export default function AdminSuperDashboard() {
     <div>
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Super Admin — Commission Sweep</h1>
+          <h1 className="admin-page-title">Super Admin — Reserve Fund</h1>
           <p className="admin-page-subtitle">Visible only to super admin accounts</p>
         </div>
       </div>
@@ -105,16 +105,15 @@ export default function AdminSuperDashboard() {
       {error && <div className="admin-alert admin-alert-error">{error}</div>}
 
       <div className="admin-card" style={{ maxWidth: '720px' }}>
-        <h2 className="admin-card-title">Commission Settings</h2>
+        <h2 className="admin-card-title">Reserve Fund Settings</h2>
         <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: 1.6, marginTop: 0 }}>
           Every sweep — from this panel or from Settings → Crypto — splits the swept funds: this percentage
-          goes to the commission address of the currency, the rest to the site's destination address.
-          Admins see the rate and the addresses (read-only) before confirming a sweep.
-          While a currency has no commission address, its sweep is disabled.
+          goes to the reserve fund address of the currency (shop expansion & platform maintenance), the rest to the site's destination address.
+          Admins only see the rate and the amounts — the reserve addresses and reserve transaction hashes are shown here only. While a currency has no reserve address, its sweep is disabled.
         </p>
         <form onSubmit={save}>
           <div className="admin-form-group">
-            <label className="admin-label">Commission %</label>
+            <label className="admin-label">Reserve Fund %</label>
             <input
               className="admin-input" type="number" min="0" max="100" step="0.1" required
               value={form.commissionPct}
@@ -124,7 +123,7 @@ export default function AdminSuperDashboard() {
           </div>
           {CURRENCIES.map(({ id }) => (
             <div className="admin-form-group" key={id}>
-              <label className="admin-label">{id} Commission Address</label>
+              <label className="admin-label">{id} Reserve Fund Address</label>
               <input
                 className="admin-input" type="text"
                 value={form[COMMISSION_ADDR_KEY[id]] || ''}
@@ -146,7 +145,7 @@ export default function AdminSuperDashboard() {
       </div>
 
       <div className="admin-card" style={{ maxWidth: '720px' }}>
-        <h2 className="admin-card-title">Sweep with Commission</h2>
+        <h2 className="admin-card-title">Sweep with Reserve Fund Split</h2>
         <SweepResult result={sweepResult} onClose={() => setSweepResult(null)} />
         {CURRENCIES.map(({ id, color }) => {
           const mainAddr = mainAddrs[`${id.toLowerCase()}_address`]
@@ -187,7 +186,7 @@ export default function AdminSuperDashboard() {
       </div>
 
       <div className="admin-card">
-        <h2 className="admin-card-title">Commission History</h2>
+        <h2 className="admin-card-title">Reserve Fund History</h2>
         <SweepLogTable logs={logs} loading={logsLoading} />
       </div>
     </div>
