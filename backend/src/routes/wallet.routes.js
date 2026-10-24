@@ -7,6 +7,7 @@ const r = Router();
 r.use(requireAuth);
 r.get('/',             walletController.getWallet);
 r.get('/balance',      walletController.getBalance);
+r.get('/prices',       walletController.getPrices);
 r.get('/deposits',              walletController.getDeposits);
 r.get('/deposits/:id',          walletController.getDeposit);
 r.post('/deposits/:id/check',   walletController.checkDeposit);

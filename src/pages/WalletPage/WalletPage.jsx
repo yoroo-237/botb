@@ -26,7 +26,9 @@ const TERMS = [
   'Deposit addresses are single-use. Do not reuse addresses from previous transactions.',
   'Minimum deposit amount may apply. Deposits below the minimum will not be credited.',
   'Processing times vary by cryptocurrency and network congestion.',
-  'Bitcoin, Litecoin, Dogecoin, and Ethereum deposits are credited automatically after sufficient blockchain confirmations. The USD equivalent is calculated at the live exchange rate at time of confirmation.',
+  'Bitcoin, Litecoin, Dogecoin, and Ethereum deposits are credited automatically after sufficient blockchain confirmations, minus the deposit fee shown below.',
+  'Your balance holds the crypto itself: its USD value follows the live market price and can go up or down until you spend it.',
+  'At checkout, the order total is converted at the live price at that moment and that exact amount of crypto is deducted.',
   'Monero (XMR) deposits require manual review and may take longer to process.',
   'Do not send tokens or assets other than the specified cryptocurrency to these addresses.',
   'BOTB is not responsible for funds sent to incorrect addresses.',
@@ -115,7 +117,7 @@ function Countdown({ expiresAt }) {
   )
 }
 
-function AddFundsModal({ onClose, onSuccess }) {
+function AddFundsModal({ onClose, onSuccess, feePct }) {
   const [step, setStep] = useState('select')
   const [currency, setCurrency] = useState('BTC')
   const [agreed, setAgreed] = useState(false)
@@ -172,6 +174,13 @@ function AddFundsModal({ onClose, onSuccess }) {
               </ol>
             </div>
 
+            {feePct != null && (
+              <div className={styles.feeBox}>
+                <strong>Deposit fee: {feePct}%</strong>
+                <span>Example: send 1 {currency} → {+(1 - feePct / 100).toFixed(4)} {currency} is added to your balance.</span>
+              </div>
+            )}
+
             <label className={styles.termsCheck}>
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
               I have read and agree to the deposit terms above.
@@ -209,7 +218,7 @@ function AddFundsModal({ onClose, onSuccess }) {
                 <>
                   <span className={styles.autoBadge}> Auto-confirmed</span>
                   <p style={{ margin: 0 }}>
-                    Your deposit will be automatically detected on the blockchain and credited at the live {currency}/USD exchange rate after sufficient confirmations.
+                    Your deposit is detected on the blockchain automatically. Once confirmed, the {currency} you sent{feePct ? ` minus the ${feePct}% deposit fee` : ''} is added to your balance, valued at the live {currency}/USD price.
                   </p>
                 </>
               )}
@@ -226,6 +235,7 @@ function DepositDetailsModal({ deposit, onClose }) {
     && new Date(deposit.expiresAt) > new Date()
   const received = fmtCrypto(deposit.amountReceived)
   const credited = Number(deposit.usdCredited)
+  const net = fmtCrypto(deposit.netAmount)
   return (
     <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className={styles.modal}>
@@ -244,7 +254,9 @@ function DepositDetailsModal({ deposit, onClose }) {
           <dt>Status</dt><dd>{deposit.status}</dd>
           <dt>Created</dt><dd>{new Date(deposit.createdAt).toLocaleString()}</dd>
           {received && <><dt>Received</dt><dd>{received} {deposit.currency}</dd></>}
-          {credited > 0 && <><dt>Credited</dt><dd>${credited.toFixed(2)}</dd></>}
+          {Number(deposit.netAmount) > 0
+            ? <><dt>Credited</dt><dd>{net} {deposit.currency}{credited > 0 && ` (≈ $${credited.toFixed(2)} at the time)`}</dd></>
+            : credited > 0 && <><dt>Credited</dt><dd>${credited.toFixed(2)}</dd></>}
           {deposit.confirmedAt && <><dt>Confirmed</dt><dd>{new Date(deposit.confirmedAt).toLocaleString()}</dd></>}
         </dl>
 
@@ -265,7 +277,8 @@ function DepositDetailsModal({ deposit, onClose }) {
 }
 
 export default function WalletPage() {
-  const { user, balance, loadUserData } = useApp()
+  const { user, balance, holdings, loadUserData } = useApp()
+  const [feePct, setFeePct] = useState(null)
   const [tab, setTab] = useState('deposits')
   const [deposits, setDeposits] = useState([])
   const [transactions, setTransactions] = useState([])
@@ -279,7 +292,10 @@ export default function WalletPage() {
 
   // Tier is computed server-side from total spent
   useEffect(() => {
-    apiFetch('/wallet').then(d => setTier(d?.tier || null)).catch(() => {})
+    apiFetch('/wallet').then(d => {
+      setTier(d?.tier || null)
+      if (d?.commissionPct != null) setFeePct(Number(d.commissionPct))
+    }).catch(() => {})
   }, [])
 
   const fetchDeposits = useCallback(async () => {
@@ -361,6 +377,17 @@ export default function WalletPage() {
             <div className={styles.balanceBlock}>
               <div className={styles.balanceLabel}>Wallet Balance</div>
               <div className={styles.balanceAmount}>${balance.toFixed(2)}</div>
+              {holdings.length > 0 && (
+                <div className={styles.holdings}>
+                  {holdings.map(h => (
+                    <span key={h.currency} className={styles.holding}>
+                      {h.amount} {h.currency}
+                      {h.usd != null && <> · ${h.usd.toFixed(2)}</>}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className={styles.liveNote}>Live value · follows the market price</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               {tier && <span className={styles.tierBadge}>{tier}</span>}
@@ -486,6 +513,7 @@ export default function WalletPage() {
 
       {showModal && (
         <AddFundsModal
+          feePct={feePct}
           onClose={() => setShowModal(false)}
           onSuccess={() => fetchDeposits()}
         />

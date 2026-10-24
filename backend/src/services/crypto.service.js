@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HDNodeWallet, JsonRpcProvider, formatEther, isAddress } from 'ethers';
+import { HDNodeWallet, JsonRpcProvider, formatEther, parseEther, isAddress } from 'ethers';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -7,7 +7,6 @@ import { mnemonicToSeedSync } from 'bip39';
 import { env } from '../config/env.js';
 import { prisma } from '../db.js';
 import { appError } from '../utils/formatters.js';
-import { getUsdPrice } from './price.service.js';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -226,8 +225,6 @@ export const cryptoService = {
 
   // Poll blockchain directly to check if a deposit has been received
   async checkDepositOnChain(deposit) {
-    const fetchPrice = getUsdPrice;
-
     if (['BTC', 'LTC', 'DOGE'].includes(deposit.currency)) {
       if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
       const chain = CHAIN_MAP[deposit.currency];
@@ -244,11 +241,8 @@ export const cryptoService = {
         return { confirmed: false, pending: pendingSats > 0, pendingSats };
       }
 
-      const cryptoAmount = totalReceivedSats / 1e8;
-      const usdPrice     = await fetchPrice(deposit.currency);
-      if (!usdPrice) return { confirmed: false, pending: false, error: 'price_unavailable' };
-
-      return { confirmed: true, cryptoAmount, usdAmount: parseFloat((cryptoAmount * usdPrice).toFixed(2)), usdPrice };
+      // Credited in crypto, so no price is needed to confirm
+      return { confirmed: true, cryptoAmount: totalReceivedSats / 1e8 };
 
     } else if (deposit.currency === 'ETH') {
       if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);
@@ -259,38 +253,37 @@ export const cryptoService = {
 
       if (balanceEth <= 0.0001) return { confirmed: false, pending: false };
 
-      const usdPrice = await fetchPrice('ETH');
-      if (!usdPrice) return { confirmed: false, pending: false, error: 'price_unavailable' };
-
-      return { confirmed: true, cryptoAmount: balanceEth, usdAmount: parseFloat((balanceEth * usdPrice).toFixed(2)), usdPrice };
+      return { confirmed: true, cryptoAmount: balanceEth };
     }
 
     return { confirmed: false, pending: false }; // XMR — manual only
   },
 
-  // Sweeps every BTC/LTC/DOGE deposit address. Each transaction has two outputs:
-  // (100 - pct)% to the site's destination address and pct% to the commission
-  // address. Below the network dust limit the commission output is dropped.
-  async sweepUtxoWithCommission(currency, destinationAddress, { pct, commissionAddress }) {
+  // Two independent sweeps share the deposit addresses:
+  //   'shop'    (admin)       — the customer-credited share (Deposit.netAmount)
+  //   'reserve' (super admin) — the deposit commission (Deposit.commissionAmount)
+  // Each sweep sends only its own share (minus its network fee) and returns the
+  // other share to the deposit address as change, so their order doesn't matter.
+  // Returns one result per eligible deposit; the caller records what was swept.
+  async sweepUtxoShare(kind, currency, destinationAddress) {
     const chain = CHAIN_MAP[currency];
     if (!chain) throw appError(`Unsupported currency: ${currency}`, 400);
     if (!env.blockcypherToken) throw appError('BLOCKCYPHER_TOKEN not configured', 500);
+    if (!this.isValidUtxoAddress(currency, destinationAddress)) {
+      throw appError(`Invalid ${currency} ${kind === 'shop' ? 'destination' : 'reserve'} address`, 400);
+    }
 
     const network  = BTC_NETWORKS[currency];
     const dust     = DUST_SATS[currency];
     const mnemonic = await getHdMnemonic();
 
-    // Reject bad addresses before touching any deposit — never build a tx to an unknown script
-    if (!this.isValidUtxoAddress(currency, destinationAddress)) {
-      throw appError(`Invalid ${currency} destination address: ${destinationAddress}`, 400);
-    }
-    if (pct > 0 && !this.isValidUtxoAddress(currency, commissionAddress)) {
-      throw appError(`Invalid ${currency} reserve fund address`, 400);
-    }
+    const deposits = await prisma.deposit.findMany({
+      where: kind === 'shop'
+        ? { currency, status: 'confirmed', shopSweptAt: null }
+        : { currency, status: 'confirmed', reserveSweptAt: null, commissionAmount: { gt: 0 } },
+      orderBy: { id: 'asc' },
+    });
 
-    const deposits = await prisma.deposit.findMany({ where: { currency }, orderBy: { id: 'asc' } });
-
-    // Fetch live fee rate from BlockCypher (low_fee_per_kb = economy rate)
     let feePerByte = { BTC: 10, LTC: 10, DOGE: 1000 }[currency]; // fallback sats/byte
     try {
       const { data: chainInfo } = await axios.get(
@@ -301,6 +294,7 @@ export const cryptoService = {
 
     // P2PKH tx size: 10 (overhead) + inputs*148 + outputs*34
     const feeFor = (inputs, outputs) => feePerByte * (10 + inputs * 148 + outputs * 34);
+    const toSats = n => Math.round(Number(n) * 1e8);
 
     const results = [];
 
@@ -318,35 +312,32 @@ export const cryptoService = {
         continue;
       }
 
-      if (utxos.length === 0) continue;
-
       const totalSats = utxos.reduce((sum, u) => sum + u.value, 0);
-
-      // Two outputs cost 34 bytes more than one; if the commission share would be
-      // dust, fall back to a single output so the whole amount still moves.
-      let fee        = feeFor(utxos.length, 2);
-      let sendAmount = totalSats - fee;
-      let commission = pct > 0 ? Math.floor(sendAmount * pct / 100) : 0;
-      let main       = sendAmount - commission;
-      if (commission > 0 && (commission < dust || main < dust)) {
-        fee        = feeFor(utxos.length, 1);
-        sendAmount = totalSats - fee;
-        commission = 0;
-        main       = sendAmount;
-      } else if (commission === 0) {
-        fee        = feeFor(utxos.length, 1);
-        sendAmount = totalSats - fee;
-        main       = sendAmount;
+      if (totalSats === 0) {
+        // Deposits credited before commissions existed and already emptied get settled
+        // so they stop being queried on every sweep.
+        results.push({ depositId: dep.id, address, status: 'empty', settle: kind === 'shop' && toSats(dep.commissionAmount) === 0 });
+        continue;
       }
 
-      if (main < dust) {
-        results.push({ depositId: dep.id, address, status: 'skipped', reason: `Balance (${totalSats} sats) too low to cover fee (${fee} sats @ ${feePerByte} sat/byte)`, balanceSats: totalSats });
+      // What must stay on the address for the other sweep. A share below dust
+      // can't be a change output, so it goes along and the other side is settled.
+      const commission = toSats(dep.commissionAmount);
+      let keep = kind === 'shop'
+        ? (dep.reserveSweptAt ? 0 : commission)
+        : (dep.shopSweptAt ? 0 : Math.max(0, totalSats - commission));
+      let settlesOther = false;
+      if (keep > 0 && keep < dust) { keep = 0; settlesOther = true; }
+
+      const fee  = feeFor(utxos.length, keep > 0 ? 2 : 1);
+      const send = totalSats - keep - fee;
+      if (send < dust) {
+        results.push({ depositId: dep.id, address, status: 'skipped', reason: `Share too small to cover the network fee (${fee} sats @ ${feePerByte} sat/byte)` });
         continue;
       }
 
       try {
         const psbt = new bitcoin.Psbt({ network });
-
         for (const utxo of utxos) {
           const { data: txData } = await axios.get(
             `https://api.blockcypher.com/v1/${chain}/txs/${utxo.tx_hash}?includeHex=true&token=${env.blockcypherToken}`
@@ -357,9 +348,8 @@ export const cryptoService = {
             nonWitnessUtxo: Buffer.from(txData.hex, 'hex'),
           });
         }
-
-        psbt.addOutput({ address: destinationAddress, value: main });
-        if (commission > 0) psbt.addOutput({ address: commissionAddress, value: commission });
+        psbt.addOutput({ address: destinationAddress, value: send });
+        if (keep > 0) psbt.addOutput({ address, value: keep }); // the other share, back to the deposit address
 
         for (let i = 0; i < utxos.length; i++) psbt.signInput(i, child);
         psbt.finalizeAllInputs();
@@ -372,35 +362,29 @@ export const cryptoService = {
 
         results.push({
           depositId: dep.id, address, status: 'swept', txHash: broadcast.tx?.hash,
-          mainSats: main, commissionSats: commission,
-          amountMain: trimAmount(main), amountCommission: trimAmount(commission),
+          amount: trimAmount(send), fee: trimAmount(fee), settlesOther, commissionPct: Number(dep.commissionPct),
         });
       } catch (err) {
-        const reason = err.response?.data?.error || err.message;
-        results.push({ depositId: dep.id, address, status: 'error', reason });
+        results.push({ depositId: dep.id, address, status: 'error', reason: err.response?.data?.error || err.message });
       }
     }
 
     return results;
   },
 
-  // Sweeps every confirmed ETH deposit address. An Ethereum transfer has a single
-  // recipient, so the commission share is sent as a second transaction (explicit
-  // consecutive nonces, so neither has to wait for the other to be mined).
-  async sweepEthWithCommission(destinationAddress, { pct, commissionAddress }) {
+  // ETH equivalent: one transfer of this sweep's share; the other share simply
+  // stays on the address.
+  async sweepEthShare(kind, destinationAddress) {
     if (!env.ethHdSeed)      throw appError('ETH_HD_SEED not configured', 500);
     if (!env.alchemy.apiKey) throw appError('ALCHEMY_API_KEY not configured', 500);
-    if (!isAddress(destinationAddress)) throw appError(`Invalid ETH destination address: ${destinationAddress}`, 400);
-    if (pct > 0 && !isAddress(commissionAddress)) throw appError(`Invalid ETH reserve fund address`, 400);
+    if (!isAddress(destinationAddress)) throw appError(`Invalid ETH ${kind === 'shop' ? 'destination' : 'reserve'} address`, 400);
 
-    const provider = new JsonRpcProvider(
-      `https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`
-    );
-
+    const provider = new JsonRpcProvider(`https://eth-mainnet.g.alchemy.com/v2/${env.alchemy.apiKey}`);
     const deposits = await prisma.deposit.findMany({
-      where: { currency: 'ETH', status: 'confirmed', ethIndex: { not: null } },
+      where: kind === 'shop'
+        ? { currency: 'ETH', status: 'confirmed', shopSweptAt: null, ethIndex: { not: null } }
+        : { currency: 'ETH', status: 'confirmed', reserveSweptAt: null, commissionAmount: { gt: 0 }, ethIndex: { not: null } },
     });
-
     if (deposits.length === 0) return [];
 
     const GAS_LIMIT = 21000n;
@@ -408,59 +392,34 @@ export const cryptoService = {
     const gasPrice  = feeData.gasPrice ?? feeData.maxFeePerGas;
     if (!gasPrice) throw appError('Could not fetch gas price from Alchemy', 500);
     const gasCost   = GAS_LIMIT * gasPrice;
-    const pctBasis  = BigInt(Math.round(pct * 100)); // pct in hundredths of a percent
+    const toWei     = n => parseEther(Number(n).toFixed(8));
 
     const results = [];
-
     for (const dep of deposits) {
-      const wallet  = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${dep.ethIndex}`)
-                                  .connect(provider);
+      const wallet  = HDNodeWallet.fromPhrase(env.ethHdSeed, undefined, `m/44'/60'/0'/0/${dep.ethIndex}`).connect(provider);
       const balance = await provider.getBalance(wallet.address);
-      if (balance === 0n) continue;
+      if (balance === 0n) { results.push({ depositId: dep.id, address: wallet.address, status: 'empty' }); continue; }
 
-      // Gas for the second transfer only when there is a commission to send
-      let spendable  = balance - gasCost * 2n;
-      let commission = pctBasis > 0n && spendable > 0n ? (spendable * pctBasis) / 10000n : 0n;
-      if (commission === 0n) spendable = balance - gasCost;
-      const main = spendable - commission;
-
-      if (main <= 0n) {
-        results.push({ depositId: dep.id, address: wallet.address, status: 'skipped', reason: 'Balance too low to cover gas' });
+      const commission = toWei(dep.commissionAmount);
+      const keep = kind === 'shop'
+        ? (dep.reserveSweptAt ? 0n : commission)
+        : (dep.shopSweptAt ? 0n : (balance > commission ? balance - commission : 0n));
+      const value = balance - keep - gasCost;
+      if (value <= 0n) {
+        results.push({ depositId: dep.id, address: wallet.address, status: 'skipped', reason: 'Share too small to cover gas' });
         continue;
       }
 
-      let nonce, mainTx;
       try {
-        nonce  = await provider.getTransactionCount(wallet.address, 'pending');
-        mainTx = await wallet.sendTransaction({
-          to: destinationAddress, value: main, gasLimit: GAS_LIMIT, gasPrice, nonce,
+        const tx = await wallet.sendTransaction({ to: destinationAddress, value, gasLimit: GAS_LIMIT, gasPrice });
+        results.push({
+          depositId: dep.id, address: wallet.address, status: 'swept', txHash: tx.hash,
+          amount: formatEther(value), commissionPct: Number(dep.commissionPct),
         });
       } catch (err) {
         results.push({ depositId: dep.id, address: wallet.address, status: 'error', reason: err.shortMessage || err.message });
-        continue;
       }
-
-      // The main transfer is already broadcast: a failure here must not hide it.
-      // The unsent commission stays on the deposit address and goes out with the next sweep.
-      let commissionTxHash = null, commissionError = null;
-      if (commission > 0n) {
-        try {
-          const commissionTx = await wallet.sendTransaction({
-            to: commissionAddress, value: commission, gasLimit: GAS_LIMIT, gasPrice, nonce: nonce + 1,
-          });
-          commissionTxHash = commissionTx.hash;
-        } catch (err) {
-          commissionError = err.shortMessage || err.message;
-        }
-      }
-
-      results.push({
-        depositId: dep.id, address: wallet.address, status: 'swept',
-        txHash: mainTx.hash, commissionTxHash, commissionError,
-        amountMain: formatEther(main), amountCommission: commissionTxHash ? formatEther(commission) : '0',
-      });
     }
-
     return results;
   },
 };

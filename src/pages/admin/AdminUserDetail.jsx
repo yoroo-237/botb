@@ -33,7 +33,7 @@ export default function AdminUserDetail() {
 
   const [passwordForm, setPasswordForm] = useState({ password: '' })
   const [editForm, setEditForm] = useState({})
-  const [balanceForm, setBalanceForm] = useState({ type: 'credit', amount: '', reason: '' })
+  const [balanceForm, setBalanceForm] = useState({ type: 'credit', currency: 'BTC', unit: 'crypto', amount: '', reason: '' })
 
   const fetchUser = useCallback(async () => {
     const data = await adminFetch(`/admin/users/${id}`)
@@ -121,9 +121,10 @@ export default function AdminUserDetail() {
       await adminFetch(`/admin/users/${id}/wallet/adjust`, {
         method: 'POST',
         body: JSON.stringify({
-          type:   balanceForm.type,
-          amount: parseFloat(balanceForm.amount),
-          reason: balanceForm.reason,
+          type:     balanceForm.type,
+          currency: balanceForm.currency,
+          reason:   balanceForm.reason,
+          [balanceForm.unit === 'usd' ? 'usdAmount' : 'amount']: parseFloat(balanceForm.amount),
         }),
       })
       setModal(null)
@@ -181,7 +182,7 @@ export default function AdminUserDetail() {
           </button>
           <button
             className="admin-btn admin-btn-primary admin-btn-sm"
-            onClick={() => { setModal('balance'); setActionError(''); setBalanceForm({ type: 'credit', amount: '', reason: '' }) }}
+            onClick={() => { setModal('balance'); setActionError(''); setBalanceForm({ type: 'credit', currency: 'BTC', unit: 'crypto', amount: '', reason: '' }) }}
           >
             Adjust Balance
           </button>
@@ -217,7 +218,13 @@ export default function AdminUserDetail() {
               <div className="admin-info-row"><span className="admin-info-label">Username</span><span className="admin-info-value">{user.username}</span></div>
               <div className="admin-info-row"><span className="admin-info-label">Role</span><span className="admin-info-value"><StatusBadge type="role" value={user.role} /></span></div>
               <div className="admin-info-row"><span className="admin-info-label">Tier</span><span className="admin-info-value"><StatusBadge type="tier" value={user.tier} /></span></div>
-              <div className="admin-info-row"><span className="admin-info-label">Balance</span><span className="admin-info-value">${Number(user.balance || 0).toFixed(2)}</span></div>
+              <div className="admin-info-row"><span className="admin-info-label">Balance (live)</span><span className="admin-info-value">${Number(user.balance || 0).toFixed(2)}</span></div>
+              {(user.holdings || []).map(h => (
+                <div key={h.currency} className="admin-info-row">
+                  <span className="admin-info-label" style={{ paddingLeft: 12 }}>{h.currency}</span>
+                  <span className="admin-info-value admin-code">{h.amount}{h.usd != null && ` ($${h.usd.toFixed(2)})`}</span>
+                </div>
+              ))}
               <div className="admin-info-row"><span className="admin-info-label">Total Spent</span><span className="admin-info-value">${Number(user.totalSpent || 0).toFixed(2)}</span></div>
               <div className="admin-info-row"><span className="admin-info-label">Points</span><span className="admin-info-value">{user.points ?? 0}</span></div>
               <div className="admin-info-row"><span className="admin-info-label">Markup %</span><span className="admin-info-value">{user.markupPct ?? 0}</span></div>
@@ -409,16 +416,28 @@ export default function AdminUserDetail() {
               </select>
             </div>
             <div className="admin-form-group">
-              <label className="admin-label">Amount ($)</label>
-              <input
-                className="admin-input"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                value={balanceForm.amount}
-                onChange={e => setBalanceForm(f => ({ ...f, amount: e.target.value }))}
-              />
+              <label className="admin-label">Currency</label>
+              <select className="admin-select" value={balanceForm.currency} onChange={e => setBalanceForm(f => ({ ...f, currency: e.target.value }))}>
+                {['BTC', 'LTC', 'DOGE', 'ETH', 'XMR'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="admin-form-group">
+              <label className="admin-label">Amount ({balanceForm.unit === 'usd' ? 'USD, converted at the live price' : balanceForm.currency})</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="admin-input"
+                  type="number"
+                  step={balanceForm.unit === 'usd' ? '0.01' : '0.00000001'}
+                  min="0.00000001"
+                  required
+                  value={balanceForm.amount}
+                  onChange={e => setBalanceForm(f => ({ ...f, amount: e.target.value }))}
+                />
+                <select className="admin-select" style={{ width: 110 }} value={balanceForm.unit} onChange={e => setBalanceForm(f => ({ ...f, unit: e.target.value }))}>
+                  <option value="crypto">{balanceForm.currency}</option>
+                  <option value="usd">USD</option>
+                </select>
+              </div>
             </div>
             <div className="admin-form-group">
               <label className="admin-label">Reason</label>

@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '../db.js';
 import { walletService } from '../services/wallet.service.js';
-import { getUsdPrice as fetchUsdPrice } from '../services/price.service.js';
 import { ok } from '../utils/response.js';
 import { env } from '../config/env.js';
 
@@ -33,27 +32,10 @@ export const webhookController = {
       return res.json(ok('Zero value received'));
     }
 
-    // Fetch live USD price from CoinGecko
-    const usdPrice = await fetchUsdPrice(deposit.currency);
+    // Credited in crypto (net of the deposit commission) — no price needed
+    await walletService.confirmDeposit(deposit.id, cryptoAmount);
 
-    if (!usdPrice) {
-      // Price fetch failed — mark partial for manual admin review
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial', amountReceived: cryptoAmount } });
-      console.warn(`[Webhook BlockCypher] Price fetch failed for ${deposit.currency} — deposit #${deposit.id} → partial`);
-      return res.json(ok('Price unavailable — marked partial for manual review'));
-    }
-
-    const usdAmount = parseFloat((cryptoAmount * usdPrice).toFixed(2));
-
-    // Store crypto amount then auto-confirm
-    await prisma.deposit.update({ where: { id: deposit.id }, data: { amountReceived: cryptoAmount } });
-    await walletService.confirmDeposit(
-      deposit.id,
-      usdAmount,
-      `Auto-confirmed ${cryptoAmount} ${deposit.currency} @ $${usdPrice} = $${usdAmount}`
-    );
-
-    console.log(`[Webhook BlockCypher] Deposit #${deposit.id} auto-confirmed: ${cryptoAmount} ${deposit.currency} → $${usdAmount}`);
+    console.log(`[Webhook BlockCypher] Deposit #${deposit.id} auto-confirmed: ${cryptoAmount} ${deposit.currency}`);
     res.json(ok('Deposit auto-confirmed'));
   },
 
@@ -99,21 +81,8 @@ export const webhookController = {
         continue;
       }
 
-      const usdPrice = await fetchUsdPrice('ETH');
-      if (!usdPrice) {
-        await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial', amountReceived: ethAmount } });
-        console.warn(`[Webhook Alchemy] Price fetch failed — deposit #${deposit.id} → partial`);
-        continue;
-      }
-
-      const usdAmount = parseFloat((ethAmount * usdPrice).toFixed(2));
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { amountReceived: ethAmount } });
-      await walletService.confirmDeposit(
-        deposit.id,
-        usdAmount,
-        `Auto-confirmed ${ethAmount} ETH @ $${usdPrice} = $${usdAmount}`
-      );
-      console.log(`[Webhook Alchemy] Deposit #${deposit.id} confirmed: ${ethAmount} ETH → $${usdAmount}`);
+      await walletService.confirmDeposit(deposit.id, ethAmount);
+      console.log(`[Webhook Alchemy] Deposit #${deposit.id} confirmed: ${ethAmount} ETH`);
     }
 
     res.json(ok('Processed'));

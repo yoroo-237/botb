@@ -43,11 +43,13 @@ export const notificationService = {
     });
   },
 
-  async notifyDeposit(userId, currency, usdAmount) {
+  async notifyDeposit(userId, currency, usdAmount, cryptoAmount = null) {
     await this.create(userId, {
       type:    'deposit',
       title:   'Deposit confirmed',
-      message: `Your ${currency} deposit of $${Number(usdAmount).toFixed(2)} has been credited.`,
+      message: cryptoAmount != null
+        ? `${cryptoAmount} ${currency} (≈ $${Number(usdAmount).toFixed(2)}) has been added to your balance.`
+        : `Your ${currency} deposit of $${Number(usdAmount).toFixed(2)} has been credited.`,
       link:    '/wallet',
     });
   },

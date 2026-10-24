@@ -1,3 +1,4 @@
+import { getUserBalance } from './balance.service.js';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
@@ -51,7 +52,7 @@ export const authService = {
         id:       user.id,
         username: user.username,
         role:     user.role,
-        balance:  Number(user.balance),
+        balance:  (await getUserBalance(user.id)).balance,
         points:   user.points,
       },
     };

@@ -15,6 +15,8 @@ model User {
   passwordHash     String
   role             String    @default("customer")  // customer | moderator | admin | superadmin
   isActive         Boolean   @default(true)
+  // Legacy USD balance, only read by scripts/convert-balances-to-crypto.js.
+  // The live balance is WalletHolding (crypto) valued at market price.
   balance          Decimal   @default(0) @db.Decimal(12, 2)
   points           Int       @default(0)
   totalSpent       Decimal   @default(0) @db.Decimal(12, 2)
@@ -46,6 +48,20 @@ model User {
   notifications  Notification[]
   reviews        Review[]
   sweepLogs      SweepLog[]
+  holdings       WalletHolding[]
+}
+
+// Crypto quantity a customer holds per currency, net of the deposit commission.
+// The USD balance shown is amount × live price, summed over currencies.
+model WalletHolding {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency  String
+  amount    Decimal  @default(0) @db.Decimal(18, 8)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, currency])
 }
 
 // ─── PRODUCTS & CATALOGUE ─────────────────────────────────────────────────────
@@ -116,6 +132,8 @@ model Order {
   trackingNumber  String?
   carrier         String?
   note            String?
+  // Crypto debited at checkout, frozen: [{ currency, amount, rate, usd }]
+  payments        Json        @default("[]")
   placedAt        DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
@@ -145,6 +163,15 @@ model Deposit {
   amountExpected  Decimal?     @db.Decimal(18, 8)
   amountReceived  Decimal      @default(0) @db.Decimal(18, 8)
   usdCredited     Decimal      @default(0) @db.Decimal(10, 2)
+  // Commission is taken when the deposit is credited: the customer gets netAmount,
+  // the super admin's reserve gets commissionAmount. Each share is swept separately.
+  commissionPct    Decimal     @default(0) @db.Decimal(5, 2)
+  commissionAmount Decimal     @default(0) @db.Decimal(18, 8)
+  netAmount        Decimal     @default(0) @db.Decimal(18, 8)
+  shopSweptAt      DateTime?
+  shopSweepTx      String?
+  reserveSweptAt   DateTime?
+  reserveSweepTx   String?
   expiresAt       DateTime
   confirmedAt     DateTime?
   hookId          String?
@@ -165,16 +192,21 @@ model Transaction {
   status     String   @default("confirmed")  // pending | confirmed | failed
   note       String?
   txHash     String?
+  // Crypto side of the movement (signed like `amount`) and the USD price used
+  cryptoAmount Decimal? @db.Decimal(18, 8)
+  rate         Decimal? @db.Decimal(18, 8)
   orderId    Int?     @unique
   order      Order?   @relation(fields: [orderId], references: [id])
   deposit    Deposit?
   createdAt  DateTime @default(now())
 }
 
-// One row per swept deposit address. Every sweep splits the funds between the
-// site's destination address and the commission address (see sweep.service).
+// One row per swept deposit address. kind: 'shop' (admin sweep of the
+// customer-credited share), 'reserve' (super admin sweep of deposit commissions)
+// or 'legacy' (old single sweep that split on-chain).
 model SweepLog {
   id                Int      @id @default(autoincrement())
+  kind              String   @default("legacy")
   currency          String
   commissionPct     Decimal  @db.Decimal(5, 2)
   totalAmount       Decimal  @db.Decimal(18, 8)

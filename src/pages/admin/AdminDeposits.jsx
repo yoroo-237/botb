@@ -85,7 +85,7 @@ function DepositHeading({ deposit }) {
 
 // ── Confirm (manual credit) ───────────────────────────────────────────────────
 function ConfirmModal({ deposit, onClose, onConfirmed }) {
-  const [form, setForm] = useState({ usdAmount: '', note: '', xmrChecks: false })
+  const [form, setForm] = useState({ amount: '', note: '', xmrChecks: false })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -100,7 +100,7 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
     try {
       await adminFetch(`/admin/deposits/${deposit.id}/confirm`, {
         method: 'PATCH',
-        body: JSON.stringify({ usdAmount: parseFloat(form.usdAmount), note: form.note }),
+        body: JSON.stringify({ amount: parseFloat(form.amount), note: form.note }),
       })
       onConfirmed()
       onClose()
@@ -119,8 +119,8 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
           <strong>XMR manual checklist</strong>
           <ol style={{ margin: '6px 0 8px', paddingLeft: '18px', lineHeight: 1.6 }}>
             <li>Open your Monero wallet and find the transaction from this customer (ask for the TX hash in a ticket).</li>
-            <li>Convert the XMR amount to USD at today's rate.</li>
-            <li>Enter the USD amount below — this credits the customer's balance.</li>
+            <li>Note the exact XMR amount received.</li>
+            <li>Enter it below — the customer's balance is credited in XMR (net of the deposit fee).</li>
           </ol>
           <label style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}>
             <input type="checkbox" checked={form.xmrChecks} onChange={e => setForm(f => ({ ...f, xmrChecks: e.target.checked }))} />
@@ -138,8 +138,8 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
 
       <form onSubmit={handleConfirm}>
         <div className="admin-form-group">
-          <label className="admin-label">USD Amount to Credit *</label>
-          <input className="admin-input" type="number" min="0.01" step="0.01" required autoFocus value={form.usdAmount} onChange={e => setForm(f => ({ ...f, usdAmount: e.target.value }))} />
+          <label className="admin-label">{deposit.currency} amount received *</label>
+          <input className="admin-input" type="number" min="0.00000001" step="0.00000001" required autoFocus value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
         </div>
         <div className="admin-form-group">
           <label className="admin-label">Note (optional)</label>
@@ -452,7 +452,7 @@ export default function AdminDeposits() {
                 <th>Address</th>
                 <th>Expected</th>
                 <th>Received</th>
-                <th>USD Credited</th>
+                <th>Credited</th>
                 <th>Status</th>
                 <th>Expires</th>
                 <th>Created</th>
@@ -488,8 +488,10 @@ export default function AdminDeposits() {
                   <td style={{ whiteSpace: 'nowrap', fontFamily: 'monospace', color: d.amountReceived > 0 ? '#198754' : '#999' }}>
                     {d.amountReceived > 0 ? `${fmtC(d.amountReceived)} ${d.currency}` : '—'}
                   </td>
-                  <td style={{ fontWeight: 700, color: d.usdCredited > 0 ? '#198754' : '#999' }}>
-                    {d.usdCredited > 0 ? fmtUsd(d.usdCredited) : '—'}
+                  <td style={{ fontWeight: 700, color: d.usdCredited > 0 || d.netAmount > 0 ? '#198754' : '#999' }}>
+                    {d.netAmount > 0
+                      ? <><span className="admin-code">{+d.netAmount} {d.currency}</span><div style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>{fmtUsd(d.usdCredited)} at deposit</div></>
+                      : d.usdCredited > 0 ? fmtUsd(d.usdCredited) : '—'}
                   </td>
                   <td>
                     <div className="admin-gap-actions">

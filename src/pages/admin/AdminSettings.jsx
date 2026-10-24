@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { adminFetch } from './utils/api.js'
 import { useApp } from '../../context/AppContext.jsx'
 import { isAdmin } from '../../utils/roles.js'
-import { RESERVE_LABEL, reserveConfigured, SplitText, SweepResult, SweepLogTable } from '../../components/admin/SweepParts.jsx'
+import { PendingTiles, SweepResult, SweepLogTable } from '../../components/admin/SweepParts.jsx'
 
 const TABS = ['General', 'Shipping', 'Loyalty', 'Deposits', 'Crypto']
 
@@ -45,9 +45,8 @@ export default function AdminSettings() {
   const [error, setError] = useState('')
   const [showSeed, setShowSeed] = useState(false)
 
-  // Sweeps — the reserve fund share is read-only here (managed in the super admin panel)
-  const [commission, setCommission] = useState(null)
-  const [commissionErr, setCommissionErr] = useState('')
+  // Sweeps — the customer-credited share only; the deposit commission is swept by the super admin
+  const [pending, setPending] = useState([])
   const [sweepLogs, setSweepLogs] = useState([])
   const [logsLoading, setLogsLoading] = useState(true)
   const [sweepConfirm, setSweepConfirm] = useState(null)  // currency awaiting confirmation
@@ -56,9 +55,9 @@ export default function AdminSettings() {
 
   const loadSweepInfo = useCallback(() => {
     if (!canEdit) return
-    adminFetch('/admin/sweep/commission')
-      .then(d => { setCommission(d); setCommissionErr('') })
-      .catch(e => { setCommission(null); setCommissionErr(e.message) })
+    adminFetch('/admin/sweep/pending')
+      .then(d => setPending(d.pending || []))
+      .catch(() => setPending([]))
     adminFetch('/admin/sweep/logs')
       .then(d => setSweepLogs(d.logs || []))
       .catch(() => setSweepLogs([]))
@@ -111,9 +110,7 @@ export default function AdminSettings() {
 
   // Why a currency cannot be swept right now (null = ready)
   function sweepBlocker(currency) {
-    if (!commission) return 'reserve fund settings unavailable'
     if (!saved[`${currency.toLowerCase()}_address`]) return 'destination address not saved'
-    if (Number(commission.commissionPct) > 0 && !reserveConfigured(commission, currency)) return 'reserve fund not configured by the super admin'
     return null
   }
 
@@ -281,7 +278,7 @@ export default function AdminSettings() {
 
               <h2 className="admin-card-title" style={{ marginTop: 0 }}>Destination Addresses</h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: '14px' }}>
-                Sweeps send the funds collected on deposit addresses to these wallets (minus the commission below). XMR is received directly on this address.
+                Sweeps send the customer-credited funds collected on deposit addresses to these wallets. XMR is received directly on this address.
               </p>
               {['btc', 'ltc', 'doge', 'eth', 'xmr'].map(c => (
                 <div key={c} className="admin-form-group">
@@ -309,32 +306,11 @@ export default function AdminSettings() {
       {tab === 'Crypto' && canEdit && (
         <>
           <div className="admin-card">
-            <h2 className="admin-card-title">{RESERVE_LABEL}</h2>
-            {commission ? (
-              <div style={{ fontSize: '0.875rem', lineHeight: 1.7 }}>
-                Every sweep sends <strong>{100 - Number(commission.commissionPct)}%</strong> to your destination address
-                and <strong>{Number(commission.commissionPct)}%</strong> to the platform reserve fund, dedicated to
-                expanding the shop and maintaining the platform. The reserve is managed by the super admin.
-                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#666' }}>
-                  {SWEEP_CURRENCIES.map(({ id }) => (
-                    <div key={id}>
-                      {id} reserve fund: {reserveConfigured(commission, id)
-                        ? <span style={{ color: '#198754' }}>configured</span>
-                        : <span style={{ color: '#dc2626' }}>not configured — {id} sweep disabled</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="admin-alert admin-alert-error">Reserve fund settings could not be loaded{commissionErr ? ` (${commissionErr})` : ''} — sweeps are disabled.</div>
-            )}
-          </div>
-
-          <div className="admin-card">
             <h2 className="admin-card-title">Sweep Funds</h2>
             <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '16px' }}>
-              Collects the crypto sitting on deposit addresses (BTC / LTC / DOGE: every deposit address; ETH: confirmed deposits) and sends it to the saved destination addresses.
+              Sends the customer-credited funds of every confirmed deposit to the saved destination addresses.
             </p>
+            <PendingTiles pending={pending} currencies={SWEEP_CURRENCIES} />
             {unsavedAddresses && (
               <div className="admin-alert admin-alert-warning">You have unsaved address changes — sweeps use the saved addresses. Save first.</div>
             )}
@@ -348,7 +324,7 @@ export default function AdminSettings() {
                   {sweepConfirm === id ? (
                     <>
                       <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 600, flex: 1, minWidth: 0 }}>
-                        Sweep {id}: <SplitText commission={commission} currency={id} mainAddr={saved[`${id.toLowerCase()}_address`]} /> ?
+                        Sweep {id} → <span className="admin-code">{saved[`${id.toLowerCase()}_address`]}</span> ?
                       </span>
                       <div className="admin-gap-actions">
                         <button type="button" className="admin-btn admin-btn-success admin-btn-sm" onClick={() => doSweep(id)}>Yes, sweep</button>
@@ -377,7 +353,7 @@ export default function AdminSettings() {
 
           <div className="admin-card">
             <h2 className="admin-card-title">Sweep History</h2>
-            <SweepLogTable logs={sweepLogs} loading={logsLoading} />
+            <SweepLogTable logs={sweepLogs} loading={logsLoading} side="shop" />
           </div>
         </>
       )}

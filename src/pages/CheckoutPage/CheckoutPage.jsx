@@ -6,12 +6,13 @@ import { apiFetch } from '../../utils/api.js'
 import { formatPrice } from '../../data/products.js'
 import styles from './CheckoutPage.module.css'
 
-const PAYMENT_METHODS = [
-  { id: 'XMR', label: 'Monero', color: '#ff6600', symbol: 'ɱ' },
-  { id: 'BTC', label: 'Bitcoin', color: '#f7931a', symbol: '₿' },
-  { id: 'DOGE', label: 'Dogecoin', color: '#c2a633', symbol: 'Ð' },
-  { id: 'LTC', label: 'Litecoin', color: '#345d9d', symbol: 'Ł' },
-]
+const COIN_STYLE = {
+  XMR:  { color: '#ff6600', symbol: 'ɱ' },
+  BTC:  { color: '#f7931a', symbol: '₿' },
+  DOGE: { color: '#c2a633', symbol: 'Ð' },
+  LTC:  { color: '#345d9d', symbol: 'Ł' },
+  ETH:  { color: '#627eea', symbol: 'Ξ' },
+}
 
 const INITIAL_FORM = {
   name: '', email: '', address: '', city: '', postalCode: '', country: 'US',
@@ -19,10 +20,11 @@ const INITIAL_FORM = {
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart()
-  const { user, balance, loadingAuth, loadUserData } = useApp()
+  const { user, balance, holdings, loadingAuth, loadUserData } = useApp()
   const navigate = useNavigate()
   const [form, setForm] = useState(INITIAL_FORM)
-  const [paymentMethod, setPaymentMethod] = useState('XMR')
+  // '' = automatic (largest holdings first), otherwise pay from that currency only
+  const [payCurrency, setPayCurrency] = useState('')
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -89,8 +91,8 @@ export default function CheckoutPage() {
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
 
-    if (balance < total) {
-      setSubmitError('Insufficient balance. Please add funds to your wallet.')
+    if (available < total) {
+      setSubmitError(`Insufficient ${payCurrency ? payCurrency + ' ' : ''}balance. Please add funds to your wallet.`)
       return
     }
 
@@ -103,7 +105,8 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           items: items.map(item => ({ productId: item.id, quantity: item.quantity })),
           shippingAddress,
-          paymentMethod,
+          paymentMethod: payCurrency || 'wallet',
+          ...(payCurrency ? { payCurrency } : {}),
           name: form.name,
           email: form.email,
         }),
@@ -120,7 +123,9 @@ export default function CheckoutPage() {
     }
   }
 
-  const balanceInsufficient = balance < total
+  const payHolding = holdings.find(h => h.currency === payCurrency)
+  const available = payHolding ? (payHolding.usd || 0) : balance
+  const balanceInsufficient = available < total
 
   if (items.length === 0) {
     return (
@@ -141,7 +146,7 @@ export default function CheckoutPage() {
 
         {balanceInsufficient && (
           <div className={styles.balanceWarning}>
-            Insufficient wallet balance (${balance.toFixed(2)} available, ${total.toFixed(2)} required).{' '}
+            Insufficient {payHolding ? payCurrency : 'wallet'} balance (${available.toFixed(2)} available, ${total.toFixed(2)} required).{' '}
             <Link to="/wallet" className={styles.walletLink}>Add funds to your wallet</Link>
           </div>
         )}
@@ -175,28 +180,39 @@ export default function CheckoutPage() {
                 </select>
               </div>
 
-              <h2 className={styles.sectionTitle} style={{ marginTop: '28px' }}>Payment Method</h2>
+              <h2 className={styles.sectionTitle} style={{ marginTop: '28px' }}>Pay with</h2>
               <div className={styles.paymentMethods}>
-                {PAYMENT_METHODS.map(pm => (
-                  <label
-                    key={pm.id}
-                    className={styles.paymentOption + (paymentMethod === pm.id ? ' ' + styles.paymentSelected : '')}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value={pm.id}
-                      checked={paymentMethod === pm.id}
-                      onChange={() => setPaymentMethod(pm.id)}
-                      className={styles.radioHidden}
-                    />
-                    <span className={styles.cryptoBadge} style={{ background: pm.color }}>
-                      {pm.symbol}
-                    </span>
-                    <span className={styles.paymentLabel}>{pm.id}</span>
-                  </label>
-                ))}
+                {[{ currency: '', label: 'Auto' }, ...holdings].map(h => {
+                  const style = COIN_STYLE[h.currency] || { color: '#555', symbol: '$' }
+                  return (
+                    <label
+                      key={h.currency || 'auto'}
+                      className={styles.paymentOption + (payCurrency === h.currency ? ' ' + styles.paymentSelected : '')}
+                      title={h.currency ? `${h.amount} ${h.currency}` : 'Uses your largest balance first'}
+                    >
+                      <input
+                        type="radio"
+                        name="payCurrency"
+                        value={h.currency}
+                        checked={payCurrency === h.currency}
+                        onChange={() => setPayCurrency(h.currency)}
+                        className={styles.radioHidden}
+                      />
+                      <span className={styles.cryptoBadge} style={{ background: style.color }}>{style.symbol}</span>
+                      <span className={styles.paymentLabel}>
+                        {h.currency || h.label}
+                        {h.usd != null && <small style={{ display: 'block', opacity: .7 }}>${h.usd.toFixed(2)}</small>}
+                      </span>
+                    </label>
+                  )
+                })}
               </div>
+              <p style={{ fontSize: '0.8rem', opacity: .7, marginTop: 8 }}>
+                {payHolding?.price
+                  ? `≈ ${+(total / payHolding.price).toFixed(8)} ${payCurrency} at the current price. `
+                  : ''}
+                The total is converted at the live price when you place the order — that amount of crypto is locked in.
+              </p>
             </div>
 
             <aside className={styles.orderSummary}>

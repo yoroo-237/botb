@@ -343,3 +343,9 @@
 .detailList dt { color: #888; font-weight: 600; }
 .detailList dd { margin: 0; text-transform: none; word-break: break-word; }
 .detailNote { font-size: 0.85rem; color: #666; line-height: 1.5; margin: 0; }
+
+/* Live crypto holdings */
+.holdings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.holding { font-size: 0.8rem; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.06); }
+.liveNote { font-size: 0.72rem; opacity: .6; margin-top: 4px; }
+.feeBox { display: flex; flex-direction: column; gap: 2px; margin: 12px 0; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(59,91,219,.25); background: rgba(59,91,219,.06); font-size: 0.85rem; }

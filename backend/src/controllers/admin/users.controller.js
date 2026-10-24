@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { prisma } from '../../db.js';
 import { walletService } from '../../services/wallet.service.js';
+import { getUserBalance, getBalancesForUsers } from '../../services/balance.service.js';
 import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { getUserTier, appError } from '../../utils/formatters.js';
@@ -45,7 +46,8 @@ export const adminUsersController = {
       if (ranges[tier]) where.totalSpent = ranges[tier];
     }
 
-    const VALID_SORTS = ['createdAt', 'username', 'balance', 'totalSpent', 'lastLoginAt'];
+    // Balances are live crypto valuations, so they can't be sorted in the database
+    const VALID_SORTS = ['createdAt', 'username', 'totalSpent', 'lastLoginAt'];
     const orderBy = {
       [VALID_SORTS.includes(sortBy) ? sortBy : 'createdAt']: sortOrder === 'asc' ? 'asc' : 'desc',
     };
@@ -55,7 +57,7 @@ export const adminUsersController = {
         where, skip, take: limit, orderBy,
         select: {
           id: true, username: true, role: true, isActive: true,
-          balance: true, totalSpent: true, points: true,
+          totalSpent: true, points: true,
           createdAt: true, lastLoginAt: true,
           _count: { select: { orders: true } },
         },
@@ -63,7 +65,8 @@ export const adminUsersController = {
       prisma.user.count({ where }),
     ]);
 
-    const mapped = users.map(u => ({ ...u, tier: getUserTier(u.totalSpent) }));
+    const balances = await getBalancesForUsers(users.map(u => u.id));
+    const mapped = users.map(u => ({ ...u, balance: balances[u.id] || 0, tier: getUserTier(u.totalSpent) }));
     res.json(ok({ users: mapped, pagination: buildPagination(page, limit, total) }));
   },
 
@@ -96,7 +99,8 @@ export const adminUsersController = {
       },
     });
     const { passwordHash: _, ...safe } = user;
-    res.json(ok({ ...safe, tier: getUserTier(user.totalSpent) }));
+    const wallet = await getUserBalance(id);
+    res.json(ok({ ...safe, balance: wallet.balance, holdings: wallet.holdings, tier: getUserTier(user.totalSpent) }));
   },
 
   async update(req, res) {
@@ -137,11 +141,14 @@ export const adminUsersController = {
 
   async adjustWallet(req, res) {
     const id = parseInt(req.params.id, 10);
-    const { type, amount, reason } = req.body;
+    const { type, amount, usdAmount, reason, currency } = req.body;
     await assertCanModify(req.user, id);
-    const txn = await walletService.adjustBalance(id, type, parseFloat(amount), reason);
-    const user = await prisma.user.findUnique({ where: { id }, select: { balance: true } });
-    res.json(ok({ transaction: txn, newBalance: Number(user.balance) }));
+    const inUsd = !(parseFloat(amount) > 0) && parseFloat(usdAmount) > 0;
+    const txn = await walletService.adjustBalance(
+      id, type, parseFloat(inUsd ? usdAmount : amount), reason, String(currency || '').toUpperCase(), inUsd ? 'usd' : 'crypto'
+    );
+    const wallet = await getUserBalance(id);
+    res.json(ok({ transaction: txn, newBalance: wallet.balance, holdings: wallet.holdings }));
   },
 
   async remove(req, res) {

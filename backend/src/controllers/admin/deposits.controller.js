@@ -19,6 +19,9 @@ function serialize(d) {
     amountExpected: d.amountExpected != null ? Number(d.amountExpected) : null,
     amountReceived: Number(d.amountReceived),
     usdCredited:    Number(d.usdCredited),
+    netAmount:      Number(d.netAmount),
+    // The commission belongs to the super admin's reserve — not exposed here
+    commissionPct: undefined, commissionAmount: undefined, reserveSweptAt: undefined, reserveSweepTx: undefined,
   };
 }
 
@@ -55,13 +58,20 @@ export const adminDepositsController = {
 
   async confirm(req, res) {
     const id          = parseInt(req.params.id, 10);
-    const { usdAmount, note } = req.body;
+    const { amount, usdAmount, note } = req.body;
 
-    if (!usdAmount || parseFloat(usdAmount) <= 0) {
-      throw appError('usdAmount must be a positive number', 400);
+    // `amount` is the crypto actually received. `usdAmount` is still accepted and
+    // converted at the current price for older clients.
+    let qty = parseFloat(amount);
+    if (!(qty > 0) && parseFloat(usdAmount) > 0) {
+      const d = await prisma.deposit.findUniqueOrThrow({ where: { id } });
+      const price = await getUsdPrice(d.currency);
+      if (!price) throw appError(`${d.currency} price unavailable — enter the crypto amount received instead`, 503);
+      qty = parseFloat(usdAmount) / price;
     }
+    if (!(qty > 0)) throw appError('amount (crypto received) must be a positive number', 400);
 
-    const txn = await walletService.confirmDeposit(id, parseFloat(usdAmount), note?.trim() || null);
+    const txn = await walletService.confirmDeposit(id, qty, note?.trim() || null);
     res.json(ok({ message: 'Deposit confirmed and balance credited', transaction: txn }));
   },
 

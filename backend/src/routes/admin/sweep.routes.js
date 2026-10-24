@@ -5,19 +5,19 @@ import { requireAdmin, requireSuperAdmin } from '../../middlewares/auth.js';
 const r = Router();
 
 // ─── Sweeps (admin) ───────────────────────────────────────────────────────────
-// Every sweep applies the commission split. The rate, the commission addresses and
-// the sweep history are readable by admins so the split is always shown before a
-// sweep is confirmed; only the super admin can change them.
+// The commission is taken when a deposit is credited, so the admin sweep only
+// collects the customer-credited share — no commission on the admin side.
 r.post('/eth/sweep',              requireAdmin, c.sweepEth);
 r.post('/utxo/sweep/:currency',   requireAdmin, c.sweepUtxo);
-r.get('/sweep/commission',        requireAdmin, c.getCommission);
+r.get('/sweep/pending',           requireAdmin, c.shopPending);
 r.get('/sweep/logs',              requireAdmin, c.listLogs);
 
-// ─── Super admin — commission settings ────────────────────────────────────────
+// ─── Super admin — deposit commissions / reserve fund ─────────────────────────
 r.get('/superadmin/settings',                requireSuperAdmin, c.getCommission);
 r.put('/superadmin/settings',                requireSuperAdmin, c.updateCommission);
 r.get('/superadmin/sweep-logs',              requireSuperAdmin, c.listLogs);
-r.post('/superadmin/eth/sweep',              requireSuperAdmin, c.sweepEth);
-r.post('/superadmin/utxo/sweep/:currency',   requireSuperAdmin, c.sweepUtxo);
+r.get('/superadmin/pending',                 requireSuperAdmin, c.reservePending);
+r.post('/superadmin/eth/sweep',              requireSuperAdmin, c.sweepReserveEth);
+r.post('/superadmin/utxo/sweep/:currency',   requireSuperAdmin, c.sweepReserveUtxo);
 
 export default r;

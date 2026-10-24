@@ -1,3 +1,4 @@
+import { getUserBalance } from '../services/balance.service.js';
 import { prisma } from '../db.js';
 import { ok } from '../utils/response.js';
 import { getUserTier } from '../utils/formatters.js';
@@ -6,7 +7,7 @@ const PROFILE_SELECT = {
   id: true, username: true, role: true, bio: true,
   telegramHandle: true, signalDetails: true, sessionDetails: true,
   btcRefundAddress: true, xmrRefundAddress: true,
-  balance: true, points: true, totalSpent: true, markupPct: true,
+  points: true, totalSpent: true, markupPct: true,
   avatarUrl: true, hidePrices: true,
   notifOrders: true, notifDeposits: true, notifTickets: true,
   notifNewProducts: true, notifLogins: true,
@@ -26,7 +27,8 @@ export const profileController = {
       where:  { id: req.user.sub },
       select: PROFILE_SELECT,
     });
-    res.json(ok({ ...user, tier: getUserTier(user.totalSpent) }));
+    const { balance } = await getUserBalance(user.id);
+    res.json(ok({ ...user, balance, tier: getUserTier(user.totalSpent) }));
   },
 
   async update(req, res) {

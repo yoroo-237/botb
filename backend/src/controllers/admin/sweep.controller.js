@@ -4,12 +4,13 @@ import { cryptoService } from '../../services/crypto.service.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
 
-// Every sweep splits the swept funds: `pct`% to the reserve fund (expansion &
-// maintenance) address of the currency, the rest to the site's destination address
-// (Settings → Crypto). Reserve settings live in SiteSetting under "super_" keys,
-// which the generic settings endpoints never expose or accept — only the super
-// admin can change them. Admins see the rate and the amounts; the reserve
-// addresses and the reserve transfer hashes are returned to the super admin only.
+// The commission is deducted from each customer deposit when it is credited
+// (wallet.service) and belongs to the super admin's reserve fund. Two separate
+// sweeps collect the funds left on the deposit addresses:
+//   - admin:       the customer-credited share → the site's address (Settings → Crypto)
+//   - super admin: the commission              → the reserve address of the currency
+// Admins have no view of the commission. Reserve settings live in SiteSetting
+// under "super_" keys, which the generic settings endpoints never expose or accept.
 
 const DEFAULT_PCT = 10;
 
@@ -31,8 +32,8 @@ const BODY_FIELDS = {
 
 const UTXO_CURRENCIES = ['BTC', 'LTC', 'DOGE'];
 
-// One sweep per currency at a time: a double click must not build two
-// transactions spending the same outputs.
+// One sweep per currency at a time: a double click (or the admin and super admin
+// sweeping together) must not build two transactions spending the same outputs.
 const running = new Set();
 
 async function readCommission() {
@@ -49,44 +50,18 @@ async function readCommission() {
 }
 
 const isSuper = req => req.user.role === 'superadmin';
+const redactLog = ({ commissionAddress, commissionTxHash, commissionAmount, commissionPct, ...log }) => log;
 
-// Admin view: the rate and which currencies have a reserve address, never the address itself
-function publicCommission(c) {
-  return {
-    commissionPct: c.commissionPct,
-    configured: Object.fromEntries(
-      Object.entries(BODY_FIELDS).map(([field, currency]) => [currency, !!c[field]])
-    ),
-  };
-}
-
-const redactLog = ({ commissionAddress, commissionTxHash, ...log }) => log;
-// Error messages (ethers copies the whole transaction) may contain the reserve address
-const redactReason = (reason, addr) => !addr ? reason
-  : String(reason).split(addr).join('[reserve fund]').split(addr.toLowerCase()).join('[reserve fund]');
-function redactSummary(summary, addr) {
-  return {
-    ...summary,
-    results: summary.results.map(redactResult),
-    skipped: summary.skipped.map(s => ({ ...s, reason: redactReason(s.reason, addr) })),
-  };
-}
-const redactResult = ({ commissionTxHash, commissionError, ...r }) =>
-  (commissionError ? { ...r, commissionError: 'reserve transfer failed — it will go out with the next sweep' } : r);
-
-async function getSweepConfig(currency) {
-  const commission = await readCommission();
-  const pct = commission.commissionPct;
-  const commissionAddress = commission[`${currency.toLowerCase()}CommissionAddress`];
-  if (pct > 0 && !commissionAddress) {
-    throw appError(`${currency} reserve fund address not configured — sweep disabled until the super admin sets it.`, 400);
+async function getDestination(kind, currency) {
+  if (kind === 'reserve') {
+    const address = (await readCommission())[`${currency.toLowerCase()}CommissionAddress`];
+    if (!address) throw appError(`${currency} reserve address not configured — set it in the super admin panel.`, 400);
+    return address;
   }
-
   const setting = await prisma.siteSetting.findUnique({ where: { key: `${currency.toLowerCase()}_address` } });
   const destination = setting?.value?.trim();
   if (!destination) throw appError(`${currency} destination address not configured (Admin → Settings → Crypto)`, 400);
-
-  return { pct, commissionAddress, destination };
+  return destination;
 }
 
 async function withLock(currency, fn) {
@@ -96,48 +71,79 @@ async function withLock(currency, fn) {
   finally { running.delete(currency); }
 }
 
-async function logSweeps(currency, swept, { pct, destination, commissionAddress }, userId) {
-  for (const r of swept) {
-    const main       = Number(r.amountMain);
-    const commission = Number(r.amountCommission);
+// Marks each swept share on its deposit and logs it. A share that went along
+// because the other one was below dust settles the other side too.
+async function record(kind, currency, results, destination, userId) {
+  const now = new Date();
+  for (const r of results) {
+    if (r.status === 'empty' && r.settle) {
+      await prisma.deposit.update({ where: { id: r.depositId }, data: { shopSweptAt: now, shopSweepTx: 'empty' } });
+      continue;
+    }
+    if (r.status !== 'swept') continue;
+
+    const mine  = kind === 'shop' ? { shopSweptAt: now, shopSweepTx: r.txHash } : { reserveSweptAt: now, reserveSweepTx: r.txHash };
+    const other = kind === 'shop' ? { reserveSweptAt: now, reserveSweepTx: 'dust' } : { shopSweptAt: now, shopSweepTx: 'dust' };
+    await prisma.deposit.update({ where: { id: r.depositId }, data: { ...mine, ...(r.settlesOther ? other : {}) } });
+
+    const amount = Number(r.amount);
     await prisma.sweepLog.create({
       data: {
-        currency,
-        commissionPct:     pct,
-        totalAmount:       main + commission,
-        mainAmount:        main,
-        mainAddress:       destination,
-        mainTxHash:        r.txHash || null,
-        commissionAmount:  commission,
-        commissionAddress: commissionAddress || '',
-        // UTXO: same transaction (second output). ETH: separate transaction.
-        commissionTxHash:  currency === 'ETH' ? r.commissionTxHash : (commission > 0 ? r.txHash : null),
+        kind, currency,
+        commissionPct:     r.commissionPct || 0,
+        totalAmount:       amount,
+        mainAmount:        kind === 'shop' ? amount : 0,
+        mainAddress:       kind === 'shop' ? destination : '',
+        mainTxHash:        kind === 'shop' ? r.txHash || null : null,
+        commissionAmount:  kind === 'reserve' ? amount : 0,
+        commissionAddress: kind === 'reserve' ? destination : '',
+        commissionTxHash:  kind === 'reserve' ? r.txHash || null : null,
         addressCount:      1,
         triggeredBy:       userId,
       },
-    }).catch(err => console.error(`[Sweep] Failed to log ${currency} sweep ${r.txHash}:`, err.message));
+    }).catch(err => console.error(`[Sweep] Failed to log ${kind} ${currency} sweep ${r.txHash}:`, err.message));
   }
 }
 
-function summarize(currency, results, pct) {
+function summarize(kind, currency, results) {
   const swept   = results.filter(r => r.status === 'swept');
-  const skipped = results.filter(r => r.status !== 'swept');
-  const sum = key => swept.reduce((s, r) => s + Number(r[key] || 0), 0);
+  const skipped = results.filter(r => r.status !== 'swept' && r.status !== 'empty');
+  const total   = swept.reduce((s, r) => s + Number(r.amount || 0), 0);
   return {
-    currency,
-    commissionPct:   pct,
-    swept:           swept.length,
-    results:         swept,
+    kind, currency,
+    swept:   swept.length,
+    results: swept.map(({ settle, settlesOther, commissionPct, ...r }) => r),
     skipped,
-    totalMain:       sum('amountMain').toFixed(8).replace(/\.?0+$/, '') || '0',
-    totalCommission: sum('amountCommission').toFixed(8).replace(/\.?0+$/, '') || '0',
+    total:   total.toFixed(8).replace(/\.?0+$/, '') || '0',
   };
+}
+
+async function sweep(kind, currency, req) {
+  const destination = await getDestination(kind, currency);
+  const results = await withLock(currency, () => currency === 'ETH'
+    ? cryptoService.sweepEthShare(kind, destination)
+    : cryptoService.sweepUtxoShare(kind, currency, destination));
+  await record(kind, currency, results, destination, req.user.sub);
+  return summarize(kind, currency, results);
+}
+
+// Unswept amounts per currency, as recorded when each deposit was credited
+async function pendingTotals(kind) {
+  const field = kind === 'shop' ? 'netAmount' : 'commissionAmount';
+  const rows = await prisma.deposit.groupBy({
+    by: ['currency'],
+    where: kind === 'shop'
+      ? { status: 'confirmed', shopSweptAt: null }
+      : { status: 'confirmed', reserveSweptAt: null, commissionAmount: { gt: 0 } },
+    _sum:   { [field]: true },
+    _count: { _all: true },
+  });
+  return rows.map(r => ({ currency: r.currency, amount: Number(r._sum[field] || 0), deposits: r._count._all }));
 }
 
 export const sweepController = {
   async getCommission(req, res) {
-    const commission = await readCommission();
-    res.json(ok(isSuper(req) ? commission : publicCommission(commission)));
+    res.json(ok(await readCommission()));
   },
 
   async updateCommission(req, res) {
@@ -146,7 +152,7 @@ export const sweepController = {
 
     if (commissionPct !== undefined) {
       const pct = Number(commissionPct);
-      if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw appError('commissionPct must be a number between 0 and 100', 400);
+      if (!Number.isFinite(pct) || pct < 0 || pct >= 100) throw appError('commissionPct must be a number from 0 to 99', 400);
       updates[COMMISSION_KEYS.pct] = String(pct);
     }
 
@@ -155,7 +161,7 @@ export const sweepController = {
       const value = String(req.body[field]).trim();
       if (value) {
         const valid = currency === 'ETH' ? isAddress(value) : cryptoService.isValidUtxoAddress(currency, value);
-        if (!valid) throw appError(`Invalid ${currency} commission address`, 400);
+        if (!valid) throw appError(`Invalid ${currency} reserve address`, 400);
       }
       updates[COMMISSION_KEYS[currency]] = value;
     }
@@ -170,6 +176,7 @@ export const sweepController = {
 
   async listLogs(req, res) {
     const logs = await prisma.sweepLog.findMany({
+      where:   isSuper(req) ? {} : { kind: { in: ['shop', 'legacy'] } },
       orderBy: { createdAt: 'desc' },
       take:    200,
       include: { triggeredByUser: { select: { id: true, username: true } } },
@@ -177,26 +184,43 @@ export const sweepController = {
     res.json(ok({ logs: isSuper(req) ? logs : logs.map(redactLog) }));
   },
 
+  // ─── Admin: customer-credited share ──────────────────────────────────────────
   async sweepUtxo(req, res) {
     const currency = req.params.currency?.toUpperCase();
     if (!UTXO_CURRENCIES.includes(currency)) throw appError('Unsupported currency for sweep', 400);
-
-    const config  = await getSweepConfig(currency);
-    const results = await withLock(currency, () =>
-      cryptoService.sweepUtxoWithCommission(currency, config.destination, config)
-    );
-    const summary = summarize(currency, results, config.pct);
-    await logSweeps(currency, summary.results, config, req.user.sub);
-    res.json(ok(isSuper(req) ? summary : redactSummary(summary, config.commissionAddress)));
+    res.json(ok(await sweep('shop', currency, req)));
   },
 
   async sweepEth(req, res) {
-    const config  = await getSweepConfig('ETH');
-    const results = await withLock('ETH', () =>
-      cryptoService.sweepEthWithCommission(config.destination, config)
-    );
-    const summary = summarize('ETH', results, config.pct);
-    await logSweeps('ETH', summary.results, config, req.user.sub);
-    res.json(ok(isSuper(req) ? summary : redactSummary(summary, config.commissionAddress)));
+    res.json(ok(await sweep('shop', 'ETH', req)));
+  },
+
+  async shopPending(req, res) {
+    res.json(ok({ pending: await pendingTotals('shop') }));
+  },
+
+  // ─── Super admin: deposit commissions ────────────────────────────────────────
+  async sweepReserveUtxo(req, res) {
+    const currency = req.params.currency?.toUpperCase();
+    if (!UTXO_CURRENCIES.includes(currency)) throw appError('Unsupported currency for sweep', 400);
+    res.json(ok(await sweep('reserve', currency, req)));
+  },
+
+  async sweepReserveEth(req, res) {
+    res.json(ok(await sweep('reserve', 'ETH', req)));
+  },
+
+  async reservePending(req, res) {
+    const [pending, collected] = await Promise.all([
+      pendingTotals('reserve'),
+      prisma.deposit.groupBy({
+        by: ['currency'], where: { status: 'confirmed', commissionAmount: { gt: 0 } },
+        _sum: { commissionAmount: true },
+      }),
+    ]);
+    res.json(ok({
+      pending,
+      collected: collected.map(r => ({ currency: r.currency, amount: Number(r._sum.commissionAmount || 0) })),
+    }));
   },
 };

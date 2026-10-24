@@ -1,3 +1,5 @@
+import { getUserBalance } from '../services/balance.service.js';
+import { getCachedUsdPrices } from '../services/price.service.js';
 import { walletService } from '../services/wallet.service.js';
 import { cryptoService } from '../services/crypto.service.js';
 import { prisma } from '../db.js';
@@ -11,11 +13,13 @@ export const walletController = {
   },
 
   async getBalance(req, res) {
-    const user = await prisma.user.findUniqueOrThrow({
-      where:  { id: req.user.sub },
-      select: { balance: true },
-    });
-    res.json(ok({ balance: Number(user.balance) }));
+    const { balance, holdings } = await getUserBalance(req.user.sub);
+    res.json(ok({ balance, holdings }));
+  },
+
+  // Live prices used to value balances — polled by the client to keep it current
+  async getPrices(req, res) {
+    res.json(ok({ prices: await getCachedUsdPrices(), pricedAt: new Date().toISOString() }));
   },
 
   async getDeposits(req, res) {
@@ -64,14 +68,7 @@ export const walletController = {
     const result = await cryptoService.checkDepositOnChain(deposit);
 
     if (result.confirmed) {
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { amountReceived: result.cryptoAmount } });
-      await walletService.confirmDeposit(
-        deposit.id,
-        result.usdAmount,
-        `Auto-confirmed ${result.cryptoAmount} ${deposit.currency} @ $${result.usdPrice} = $${result.usdAmount}`
-      );
-    } else if (result.error === 'price_unavailable') {
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'partial' } });
+      await walletService.confirmDeposit(deposit.id, result.cryptoAmount);
     }
 
     const updated = await prisma.deposit.findUnique({ where: { id: deposit.id } });
