@@ -128,7 +128,7 @@ export default function MiniCart({ isOpen, onClose }) {
                 <span className={styles.subtotalLabel}>Subtotal</span>
                 <span className={styles.subtotalValue}>{formatPrice(subtotal)}</span>
               </div>
-              <p className={styles.shippingNote}>Shipping and discounts calculated at checkout.</p>
+              <p className={styles.shippingNote}>Delivery is optional and chosen at checkout.</p>
               <div className={styles.footerActions}>
                 <Link to="/cart" onClick={onClose} className={'wp-element-button ' + styles.cartBtn} style={{background:'transparent',color:'var(--color-contrast)',border:'2px solid var(--color-contrast)'}}>
                   View my cart

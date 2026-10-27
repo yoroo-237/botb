@@ -32,7 +32,7 @@ function loadAddress() {
 }
 
 export default function CheckoutPage() {
-  const { items, subtotal, clearCart } = useCart()
+  const { items, subtotal, clearCart, syncCart } = useCart()
   const { user, balance, holdings, loadingAuth, loadUserData } = useApp()
   const navigate = useNavigate()
   // Nothing is required: the Telegram username/ID is optional (asked only when the
@@ -59,6 +59,9 @@ export default function CheckoutPage() {
       }))
       .catch(() => {})
   }, [])
+
+  // Live prices before paying: the total shown is the total charged
+  useEffect(() => { syncCart() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (user) apiFetch('/profile').then(p => setProfileHandle(p.telegramHandle || '')).catch(() => setProfileHandle(''))
@@ -183,7 +186,7 @@ export default function CheckoutPage() {
 
                 {delivery && (
                   <div className={styles.addressForm}>
-                    <Field label="Full name" name="a-name" autoComplete="shipping name" value={address.name} onChange={setA('name')} error={bad('name') && 'Enter the name on the package'} />
+                    <Field label="Code name" name="a-name" autoComplete="off" placeholder="The name to put on the package" value={address.name} onChange={setA('name')} error={bad('name') && 'Enter a code name for the package'} />
                     <Field label="Street address" name="a-street" autoComplete="shipping address-line1" placeholder="123 Main St" value={address.street} onChange={setA('street')} error={bad('street') && 'Enter a street address'} />
                     <Field label="Apt, suite, unit (optional)" name="a-apt" autoComplete="shipping address-line2" value={address.apt} onChange={setA('apt')} />
                     <div className={styles.fieldRow}>

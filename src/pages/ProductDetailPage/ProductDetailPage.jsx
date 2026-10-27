@@ -272,11 +272,15 @@ export default function ProductDetailPage() {
                 >＋</button>
               </div>
 
+              {/* Only a live catalog product can be ordered: the static fallback's
+                  ids don't exist in the database */}
               <button
                 onClick={handleAddToCart}
                 className={'wp-element-button ' + styles.addBtn}
+                disabled={!product.fromApi}
+                title={product.fromApi ? undefined : 'This product is not available right now'}
               >
-                {added ? 'Added!' : 'Add to cart'}
+                {!product.fromApi ? (apiLoading ? 'Loading…' : 'Unavailable') : added ? 'Added!' : 'Add to cart'}
               </button>
             </div>
 

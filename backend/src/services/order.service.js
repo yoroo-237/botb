@@ -11,13 +11,14 @@ export const orderService = {
   // customer gives a US address, shipping is charged and the address goes on the
   // invoice; without it, nothing is asked and the shop arranges it on Telegram.
   async createOrder(userId, { items, paymentMethod, payCurrency, telegram, delivery }) {
-    if (!items?.length)     throw appError('Cart is empty', 400);
+    if (!Array.isArray(items) || !items.length) throw appError('Cart is empty', 400);
+    if (items.length > 50) throw appError('Too many lines in one order.', 400);
 
     let shipTo = null;
     if (delivery) {
       const d = Object.fromEntries(['name', 'street', 'apt', 'city', 'state', 'zip'].map(k => [k, String(delivery[k] || '').trim().slice(0, 120)]));
       if (!d.name || !d.street || !d.city || !/^[A-Z]{2}$/.test(d.state) || !/^\d{5}(-\d{4})?$/.test(d.zip)) {
-        throw appError('Please complete the delivery address (name, street, city, state and 5-digit ZIP).', 400);
+        throw appError('Please complete the delivery address (code name, street, city, state and 5-digit ZIP).', 400);
       }
       shipTo = { name: d.name, address: `${d.street}${d.apt ? `, ${d.apt}` : ''}, ${d.city}, ${d.state} ${d.zip}, US` };
     }
@@ -34,12 +35,13 @@ export const orderService = {
     const freeThreshold = parseFloat(settings.find(s => s.key === 'shipping_free_threshold')?.value || '0');
 
     const productIds = [...new Set(items.map(i => Number(i.productId)))];
+    if (!productIds.every(Number.isInteger)) throw appError('One or more products are no longer available. Please review your cart.', 400);
     const products   = await prisma.product.findMany({
       where: { id: { in: productIds }, isActive: true },
     });
 
     if (products.length !== productIds.length) {
-      throw appError('One or more products are invalid or unavailable', 400);
+      throw appError('One or more products are no longer available. Please review your cart.', 400);
     }
 
     const productMap = Object.fromEntries(products.map(p => [p.id, p]));
@@ -48,14 +50,16 @@ export const orderService = {
     const orderItems = items.map(item => {
       const product  = productMap[Number(item.productId)];
       const price    = Number(product.price);
-      const quantity = Math.max(1, parseInt(item.quantity, 10));
+      const quantity = parseInt(item.quantity, 10);
+      if (!(quantity >= 1 && quantity <= 999)) throw appError('Invalid quantity.', 400);
       subtotal += price * quantity;
       return { productId: product.id, name: product.name, price, quantity };
     });
 
     // Shipping is only charged when the customer chose delivery
+    subtotal = Math.round(subtotal * 100) / 100;
     const shippingFee = !shipTo || (freeThreshold > 0 && subtotal >= freeThreshold) ? 0 : shippingCost;
-    const totalAmount = subtotal + shippingFee;
+    const totalAmount = Math.round((subtotal + shippingFee) * 100) / 100;
 
     // Freeze the conversion now: these prices and quantities are what the order
     // costs in crypto, whatever the market does afterwards.
@@ -134,7 +138,7 @@ export const orderService = {
         shipping:    shipTo ? result.shippingFee : null,
         total:       result.totalAmount,
         payments, user: buyer,
-        shipTo:      shipTo && `${shipTo.name}\n${shipTo.address}`,
+        shipTo:      shipTo && `Code name: ${shipTo.name}\n${shipTo.address}`,
       }),
       balanceService.getUserBalance(userId),
     ]);

@@ -56,13 +56,16 @@ export async function credit(tx, userId, currency, amount) {
 
 export async function debit(tx, userId, currency, amount) {
   const row = await tx.walletHolding.findUnique({ where: { userId_currency: { userId, currency } } });
-  if (!row || parseFloat(row.amount) + 1e-9 < amount) {
-    throw Object.assign(new Error(`Insufficient ${currency} balance.`), { status: 422 });
-  }
-  return tx.walletHolding.update({
-    where: { id: row.id },
+  const insufficient = () => Object.assign(new Error(`Insufficient ${currency} balance.`), { status: 422 });
+  if (!row || parseFloat(row.amount) + 1e-9 < amount) throw insufficient();
+  // Guarded decrement: two concurrent orders can both pass the read above, but
+  // only one can take the funds, so the balance never goes negative.
+  const { count } = await tx.walletHolding.updateMany({
+    where: { id: row.id, amount: { gte: round8(amount) } },
     data:  { amount: { decrement: round8(amount) } },
   });
+  if (count === 0) throw insufficient();
+  return row;
 }
 
 // Works out which crypto pays a USD amount at the given (frozen) prices.

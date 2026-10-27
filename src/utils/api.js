@@ -42,6 +42,6 @@ export async function apiFetch(endpoint, options = {}) {
   } catch {
     throw new Error(`Server error (${res.status}). Please try again.`)
   }
-  if (!json.success) throw new Error(json.error || 'Request failed')
+  if (!json.success) throw Object.assign(new Error(json.error || 'Request failed'), { status: res.status })
   return json.data
 }
