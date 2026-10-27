@@ -120,7 +120,7 @@ function ConfirmModal({ deposit, onClose, onConfirmed }) {
           <ol style={{ margin: '6px 0 8px', paddingLeft: '18px', lineHeight: 1.6 }}>
             <li>Open your Monero wallet and find the transaction from this customer (ask for the TX hash in a ticket).</li>
             <li>Note the exact XMR amount received.</li>
-            <li>Enter it below — the customer's balance is credited in XMR (net of the deposit fee).</li>
+            <li>Enter it below — the customer's balance is credited in XMR (net of the  ).</li>
           </ol>
           <label style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}>
             <input type="checkbox" checked={form.xmrChecks} onChange={e => setForm(f => ({ ...f, xmrChecks: e.target.checked }))} />

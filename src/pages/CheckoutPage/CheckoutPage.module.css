@@ -207,3 +207,17 @@
   font-size: var(--font-size-small);
   margin-bottom: var(--spacing-20);
 }
+
+/* Delivery */
+.deliveryOption { flex: 1 1 240px; }
+.deliveryOption .paymentLabel { flex: 1; }
+.optionHint { display: block; font-weight: 400; font-size: var(--font-size-small); color: var(--color-accent-4); margin: 2px 0 0; }
+.optionAmount { font-weight: 600; font-size: var(--font-size-small); }
+.addressForm { display: flex; flex-direction: column; gap: var(--spacing-20); margin-bottom: var(--spacing-30); }
+
+/* Order confirmation */
+.invoiceNote { font-size: var(--font-size-small); color: var(--color-accent-4); margin: 0 0 8px; }
+.telegramBtn { background: #229ed9 !important; color: #fff !important; text-align: center; }
+.successIcon { animation: pop .6s cubic-bezier(.2, .8, .2, 1); }
+@keyframes pop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }

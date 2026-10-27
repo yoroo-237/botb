@@ -3,13 +3,29 @@ import { notificationService } from './notification.service.js';
 import { formatTxnId, formatOrderNumber, appError } from '../utils/formatters.js';
 import * as balanceService from './balance.service.js';
 import { getCachedUsdPrices } from './price.service.js';
+import { sendOrderInvoice } from './telegram.service.js';
 
 export const orderService = {
-  async createOrder(userId, { items, shippingAddress, paymentMethod, name, email, payCurrency }) {
+  // No customer details are required: the Telegram username/ID is optional (saved
+  // to the profile when given at checkout). Delivery is an option: with it the
+  // customer gives a US address, shipping is charged and the address goes on the
+  // invoice; without it, nothing is asked and the shop arranges it on Telegram.
+  async createOrder(userId, { items, paymentMethod, payCurrency, telegram, delivery }) {
     if (!items?.length)     throw appError('Cart is empty', 400);
-    if (!shippingAddress)   throw appError('Shipping address is required', 400);
-    if (!paymentMethod)     throw appError('Payment method is required', 400);
-    if (!name?.trim())      throw appError('Name is required', 400);
+
+    let shipTo = null;
+    if (delivery) {
+      const d = Object.fromEntries(['name', 'street', 'apt', 'city', 'state', 'zip'].map(k => [k, String(delivery[k] || '').trim().slice(0, 120)]));
+      if (!d.name || !d.street || !d.city || !/^[A-Z]{2}$/.test(d.state) || !/^\d{5}(-\d{4})?$/.test(d.zip)) {
+        throw appError('Please complete the delivery address (name, street, city, state and 5-digit ZIP).', 400);
+      }
+      shipTo = { name: d.name, address: `${d.street}${d.apt ? `, ${d.apt}` : ''}, ${d.city}, ${d.state} ${d.zip}, US` };
+    }
+
+    const handle = String(telegram || '').trim().replace(/^@/, '').slice(0, 64);
+    if (handle) {
+      await prisma.user.updateMany({ where: { id: userId, telegramHandle: null }, data: { telegramHandle: handle } });
+    }
 
     const settings = await prisma.siteSetting.findMany({
       where: { key: { in: ['shipping_cost', 'shipping_free_threshold'] } },
@@ -37,7 +53,8 @@ export const orderService = {
       return { productId: product.id, name: product.name, price, quantity };
     });
 
-    const shippingFee = (freeThreshold > 0 && subtotal >= freeThreshold) ? 0 : shippingCost;
+    // Shipping is only charged when the customer chose delivery
+    const shippingFee = !shipTo || (freeThreshold > 0 && subtotal >= freeThreshold) ? 0 : shippingCost;
     const totalAmount = subtotal + shippingFee;
 
     // Freeze the conversion now: these prices and quantities are what the order
@@ -67,12 +84,12 @@ export const orderService = {
         data: {
           orderNumber:    'TEMP',
           userId,
-          paymentMethod,
+          paymentMethod:   paymentMethod || 'wallet',
           totalAmount,
           shippingFee,
-          shippingAddress: shippingAddress.trim(),
-          name:            name.trim(),
-          email:           email?.trim() || null,
+          shippingAddress: shipTo?.address || '',
+          name:            shipTo?.name || '',
+          email:           null,
           payments,
           items:           { create: orderItems },
         },
@@ -108,7 +125,19 @@ export const orderService = {
 
     await notificationService.notifyOrder(userId, result.orderNumber);
 
-    const { balance } = await balanceService.getUserBalance(userId);
-    return { order: result, payments, newBalance: balance };
+    // Paid in the app, invoiced on Telegram (best-effort: never fails the order)
+    const buyer = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, telegramHandle: true } });
+    const [invoice, { balance }] = await Promise.all([
+      sendOrderInvoice({
+        orderNumber: result.orderNumber,
+        lines:       result.items.map(i => ({ name: i.name, quantity: i.quantity, total: Number(i.price) * i.quantity })),
+        shipping:    shipTo ? result.shippingFee : null,
+        total:       result.totalAmount,
+        payments, user: buyer,
+        shipTo:      shipTo && `${shipTo.name}\n${shipTo.address}`,
+      }),
+      balanceService.getUserBalance(userId),
+    ]);
+    return { order: result, payments, newBalance: balance, invoice };
   },
 };

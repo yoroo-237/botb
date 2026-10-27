@@ -14,18 +14,37 @@ const COIN_STYLE = {
   ETH:  { color: '#627eea', symbol: 'Ξ' },
 }
 
-const INITIAL_FORM = {
-  name: '', email: '', address: '', city: '', postalCode: '', country: 'US',
+const STATES = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'],
+  ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'],
+  ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'],
+  ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'],
+  ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'],
+  ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'],
+  ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'],
+  ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+]
+const EMPTY_ADDRESS = { name: '', street: '', apt: '', city: '', state: '', zip: '' }
+
+// Kept on this device only, to prefill the next delivery
+function loadAddress() {
+  try { return { ...EMPTY_ADDRESS, ...JSON.parse(localStorage.getItem('checkout_address') || '{}') } } catch { return EMPTY_ADDRESS }
 }
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart()
   const { user, balance, holdings, loadingAuth, loadUserData } = useApp()
   const navigate = useNavigate()
-  const [form, setForm] = useState(INITIAL_FORM)
+  // Nothing is required: the Telegram username/ID is optional (asked only when the
+  // profile has none, then saved to it), and delivery is an option: choosing it
+  // asks for a US address, adds shipping and puts the address on the invoice.
+  const [profileHandle, setProfileHandle] = useState(null)
+  const [telegram, setTelegram] = useState('')
+  const [delivery, setDelivery] = useState(false)
+  const [address, setAddress] = useState(loadAddress)
+  const [touched, setTouched] = useState(false)
   // '' = automatic (largest holdings first), otherwise pay from that currency only
   const [payCurrency, setPayCurrency] = useState('')
-  const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmation, setConfirmation] = useState(null)
@@ -41,56 +60,34 @@ export default function CheckoutPage() {
       .catch(() => {})
   }, [])
 
-  const shippingFee = shipping.freeThreshold > 0 && subtotal >= shipping.freeThreshold ? 0 : shipping.cost
+  useEffect(() => {
+    if (user) apiFetch('/profile').then(p => setProfileHandle(p.telegramHandle || '')).catch(() => setProfileHandle(''))
+  }, [user])
+
+  const deliveryFee = shipping.freeThreshold > 0 && subtotal >= shipping.freeThreshold ? 0 : shipping.cost
+  const shippingFee = delivery ? deliveryFee : 0
   const total = subtotal + shippingFee
+
+  const addrErrors = {
+    name: !address.name.trim(), street: !address.street.trim(), city: !address.city.trim(),
+    state: !address.state, zip: !/^\d{5}(-\d{4})?$/.test(address.zip.trim()),
+  }
+  const addressOk = !delivery || !Object.values(addrErrors).some(Boolean)
+  const setA = k => e => setAddress(a => ({ ...a, [k]: k === 'zip' ? e.target.value.replace(/[^\d-]/g, '') : e.target.value }))
+  const bad = k => touched && addrErrors[k]
 
   if (loadingAuth) return <div style={{ padding: '40px', textAlign: 'center' }}>Loading…</div>
   if (!user) return <Navigate to="/login" state={{ from: { pathname: '/checkout' } }} replace />
 
-  if (confirmation) {
-    return (
-      <main className="site-main">
-        <div className="alignwide">
-          <div className={styles.success}>
-            <div className={styles.successIcon}>✓</div>
-            <h1 className={styles.successTitle}>Order Placed!</h1>
-            <p className={styles.successMsg}>
-              Your order <strong>#{confirmation}</strong> has been received. You will be contacted for delivery details.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/')} className="wp-element-button">
-                Continue Shopping
-              </button>
-              <Link to="/wallet" className="wp-element-button">View Wallet</Link>
-            </div>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  function handleChange(e) {
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }))
-    setErrors(er => ({ ...er, [e.target.name]: '' }))
-  }
-
-  function validate() {
-    const errs = {}
-    if (!form.name.trim()) errs.name = 'Full name is required'
-    if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!/^[^@]+@[^@]+\.[^@]+$/.test(form.email)) errs.email = 'Invalid email'
-    if (!form.address.trim()) errs.address = 'Address is required'
-    if (!form.city.trim()) errs.city = 'City is required'
-    if (!form.postalCode.trim()) errs.postalCode = 'Postal code is required'
-    if (!form.country.trim()) errs.country = 'Country is required'
-    return errs
-  }
+  if (confirmation) return <OrderPlaced {...confirmation} onContinue={() => navigate('/')} />
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
-
+    setTouched(true)
+    if (!addressOk) {
+      document.getElementById('delivery')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
     if (available < total) {
       setSubmitError(`Insufficient ${payCurrency ? payCurrency + ' ' : ''}balance. Please add funds to your wallet.`)
       return
@@ -99,22 +96,21 @@ export default function CheckoutPage() {
     setLoading(true)
     setSubmitError('')
     try {
-      const shippingAddress = `${form.address}, ${form.city} ${form.postalCode}, ${form.country}`
+      if (delivery) { try { localStorage.setItem('checkout_address', JSON.stringify(address)) } catch { /* storage blocked */ } }
       const data = await apiFetch('/orders', {
         method: 'POST',
         body: JSON.stringify({
           items: items.map(item => ({ productId: item.id, quantity: item.quantity })),
-          shippingAddress,
           paymentMethod: payCurrency || 'wallet',
           ...(payCurrency ? { payCurrency } : {}),
-          name: form.name,
-          email: form.email,
+          ...(!profileHandle && telegram.trim() ? { telegram: telegram.trim() } : {}),
+          ...(delivery ? { delivery: { ...address, zip: address.zip.trim() } } : {}),
         }),
       })
       clearCart()
       loadUserData()  // the order was paid from the wallet — refresh the header balance
       const orderNumber = data.order?.orderNumber || data.order?.id || data.id || 'N/A'
-      setConfirmation(orderNumber)
+      setConfirmation({ orderNumber, invoice: data.invoice })
       window.scrollTo({ top: 0 })
     } catch (err) {
       setSubmitError(err.message || 'Failed to place order. Please try again.')
@@ -154,33 +150,60 @@ export default function CheckoutPage() {
         <form onSubmit={handleSubmit} noValidate>
           <div className={styles.checkoutLayout}>
             <div className={styles.billingSection}>
-              <h2 className={styles.sectionTitle}>Delivery Information</h2>
+              {profileHandle === '' && (
+                <>
+                  <h2 className={styles.sectionTitle}>Telegram <span style={{ fontWeight: 400, opacity: .6, fontSize: '0.8em' }}>(optional)</span></h2>
+                  <Field label="Your Telegram username or ID" name="telegram" placeholder="@username" autoComplete="off" value={telegram} onChange={e => setTelegram(e.target.value)} />
+                  <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--color-accent-4)', margin: '4px 0 28px' }}>
+                    Added to your invoice so the shop can reach you, and saved to your profile. We don’t ask for anything else.
+                  </p>
+                </>
+              )}
 
-              <Field label="Full Name *" name="name" value={form.name} onChange={handleChange} error={errors.name} />
-              <Field label="Email *" name="email" type="email" value={form.email} onChange={handleChange} error={errors.email} />
-              <Field label="Address *" name="address" value={form.address} onChange={handleChange} error={errors.address} />
-              <div className={styles.fieldRow}>
-                <Field label="City *" name="city" value={form.city} onChange={handleChange} error={errors.city} />
-                <Field label="Postal Code *" name="postalCode" value={form.postalCode} onChange={handleChange} error={errors.postalCode} />
-              </div>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label} htmlFor="country">Country</label>
-                <select id="country" name="country" value={form.country} onChange={handleChange} className={styles.select}>
-                  <option value="US">United States</option>
-                  <option value="CA">Canada</option>
-                  <option value="GB">United Kingdom</option>
-                  <option value="AU">Australia</option>
-                  <option value="DE">Germany</option>
-                  <option value="FR">France</option>
-                  <option value="NL">Netherlands</option>
-                  <option value="CH">Switzerland</option>
-                  <option value="AT">Austria</option>
-                  <option value="BE">Belgium</option>
-                  <option value="OTHER">Other</option>
-                </select>
+              <div id="delivery" style={{ scrollMarginTop: 100 }}>
+                <h2 className={styles.sectionTitle}>Delivery</h2>
+                <div className={styles.paymentMethods} role="radiogroup" aria-label="Delivery">
+                  <label className={styles.paymentOption + ' ' + styles.deliveryOption + (delivery ? ' ' + styles.paymentSelected : '')}>
+                    <input type="radio" name="delivery" checked={delivery} onChange={() => setDelivery(true)} className={styles.radioHidden} />
+                    <span className={styles.paymentLabel}>
+                      Ship it to me
+                      <small className={styles.optionHint}>Discreet, tracked shipping anywhere in the US</small>
+                    </span>
+                    <span className={styles.optionAmount}>{deliveryFee ? formatPrice(deliveryFee) : 'Free'}</span>
+                  </label>
+                  <label className={styles.paymentOption + ' ' + styles.deliveryOption + (!delivery ? ' ' + styles.paymentSelected : '')}>
+                    <input type="radio" name="delivery" checked={!delivery} onChange={() => setDelivery(false)} className={styles.radioHidden} />
+                    <span className={styles.paymentLabel}>
+                      No delivery
+                      <small className={styles.optionHint}>We’ll sort it out with you on Telegram</small>
+                    </span>
+                    <span className={styles.optionAmount}>{formatPrice(0)}</span>
+                  </label>
+                </div>
+
+                {delivery && (
+                  <div className={styles.addressForm}>
+                    <Field label="Full name" name="a-name" autoComplete="shipping name" value={address.name} onChange={setA('name')} error={bad('name') && 'Enter the name on the package'} />
+                    <Field label="Street address" name="a-street" autoComplete="shipping address-line1" placeholder="123 Main St" value={address.street} onChange={setA('street')} error={bad('street') && 'Enter a street address'} />
+                    <Field label="Apt, suite, unit (optional)" name="a-apt" autoComplete="shipping address-line2" value={address.apt} onChange={setA('apt')} />
+                    <div className={styles.fieldRow}>
+                      <Field label="City" name="a-city" autoComplete="shipping address-level2" value={address.city} onChange={setA('city')} error={bad('city') && 'Required'} />
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.label} htmlFor="a-state">State</label>
+                        <select id="a-state" className={styles.select} style={bad('state') ? { borderColor: '#cf2e2e' } : undefined} autoComplete="shipping address-level1" value={address.state} onChange={setA('state')}>
+                          <option value="">Select</option>
+                          {STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                        </select>
+                        {bad('state') && <span style={{ fontSize: 'var(--font-size-small)', color: '#cf2e2e' }}>Required</span>}
+                      </div>
+                      <Field label="ZIP code" name="a-zip" inputMode="numeric" autoComplete="shipping postal-code" placeholder="12345" maxLength={10} value={address.zip} onChange={setA('zip')} error={bad('zip') && '5-digit ZIP'} />
+                    </div>
+                    <p className={styles.optionHint}>Shipped in discreet, unmarked packaging. Your address goes on the invoice the shop receives on Telegram.</p>
+                  </div>
+                )}
               </div>
 
-              <h2 className={styles.sectionTitle} style={{ marginTop: '28px' }}>Pay with</h2>
+              <h2 className={styles.sectionTitle} style={{ marginTop: 'var(--spacing-30)' }}>Pay with</h2>
               <div className={styles.paymentMethods}>
                 {[{ currency: '', label: 'Auto' }, ...holdings].map(h => {
                   const style = COIN_STYLE[h.currency] || { color: '#555', symbol: '$' }
@@ -235,8 +258,8 @@ export default function CheckoutPage() {
                 <span>{formatPrice(subtotal)}</span>
               </div>
               <div className={styles.orderRow}>
-                <span>Shipping</span>
-                <span>{shippingFee === 0 ? 'Free' : formatPrice(shippingFee)}</span>
+                <span>Delivery</span>
+                <span>{!delivery ? 'None' : shippingFee === 0 ? 'Free' : formatPrice(shippingFee)}</span>
               </div>
               <div className={styles.orderRow + ' ' + styles.orderTotal}>
                 <span>Total</span>
@@ -261,6 +284,9 @@ export default function CheckoutPage() {
               >
                 {loading ? 'Placing Order…' : 'Place Order'}
               </button>
+              {touched && !addressOk && (
+                <p style={{ fontSize: 'var(--font-size-small)', color: '#cf2e2e', textAlign: 'center', marginTop: 8 }}>Please complete your delivery address.</p>
+              )}
             </aside>
           </div>
         </form>
@@ -269,7 +295,7 @@ export default function CheckoutPage() {
   )
 }
 
-function Field({ label, name, type = 'text', value, onChange, error, placeholder }) {
+function Field({ label, name, type = 'text', value, onChange, error, placeholder, autoComplete, inputMode, maxLength }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
       {label && (
@@ -284,6 +310,9 @@ function Field({ label, name, type = 'text', value, onChange, error, placeholder
         value={value}
         onChange={onChange}
         placeholder={placeholder}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        maxLength={maxLength}
         style={{
           appearance: 'none',
           border: '1px solid ' + (error ? '#cf2e2e' : 'var(--color-accent-6)'),
@@ -299,5 +328,32 @@ function Field({ label, name, type = 'text', value, onChange, error, placeholder
       />
       {error && <span style={{ fontSize: 'var(--font-size-small)', color: '#cf2e2e' }}>{error}</span>}
     </div>
+  )
+}
+
+// Paid: the order number. The invoice (a copy of the order) just goes to Telegram
+function OrderPlaced({ orderNumber, invoice, onContinue }) {
+  return (
+    <main className="site-main">
+      <div className="alignwide">
+        <div className={styles.success}>
+          <div className={styles.successIcon}>✓</div>
+          <h1 className={styles.successTitle}>Order confirmed</h1>
+          <p className={styles.successMsg}>
+            Order <strong>#{orderNumber}</strong> is paid. The shop will contact you on Telegram to finish up.
+          </p>
+          {invoice && (
+            <p className={styles.invoiceNote}>
+              {invoice.delivered ? 'Your invoice has been sent to the shop on Telegram.' : 'Open Telegram to send your invoice to the shop.'}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: 24 }}>
+            {invoice?.shopTelegramUrl && <a className={'wp-element-button ' + styles.telegramBtn} href={invoice.shopTelegramUrl} target="_blank" rel="noreferrer">Open Telegram</a>}
+            <button onClick={onContinue} className="wp-element-button">Continue shopping</button>
+            <Link to="/wallet" className="wp-element-button">View wallet</Link>
+          </div>
+        </div>
+      </div>
+    </main>
   )
 }
