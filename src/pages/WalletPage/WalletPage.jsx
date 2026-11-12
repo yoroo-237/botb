@@ -176,8 +176,8 @@ function AddFundsModal({ onClose, onSuccess, feePct }) {
 
             {feePct != null && (
               <div className={styles.feeBox}>
-                <strong>Deposit fee: {feePct}%</strong>
-                <span>Example: send 1 {currency} → {+(1 - feePct / 100).toFixed(4)} {currency} is added to your balance.</span>
+                <strong>Deposit fee: {feePct/10}%</strong>
+                <span>Example: send 1 {currency} → {+(1 - feePct / 1000).toFixed(4)} {currency} is added to your balance.</span>
               </div>
             )}
 
@@ -218,7 +218,7 @@ function AddFundsModal({ onClose, onSuccess, feePct }) {
                 <>
                   <span className={styles.autoBadge}> Auto-confirmed</span>
                   <p style={{ margin: 0 }}>
-                    Your deposit is detected on the blockchain automatically. Once confirmed, the {currency} you sent{feePct ? ` minus the ${feePct}% deposit fee` : ''} is added to your balance, valued at the live {currency}/USD price.
+                    Your deposit is detected on the blockchain automatically. Once confirmed, the {currency} you sent{feePct ? ` minus the ${feePct/10}% deposit fee` : ''} is added to your balance, valued at the live {currency}/USD price.
                   </p>
                 </>
               )}
