@@ -9,6 +9,7 @@ r.post('/purge-blockcypher',        c.purgeBlockcypher);
 r.get('/:id/usd-value',             c.usdValue);
 r.get('/:id/onchain',               c.onchain);
 r.get('/:id/verify-address',        c.verifyAddress);
+r.post('/:id/sync',                 c.sync);
 r.patch('/:id/confirm',             c.confirm);
 r.patch('/:id/expire',              c.expire);
 r.post('/:id/reregister-webhook',   c.reregisterWebhook);

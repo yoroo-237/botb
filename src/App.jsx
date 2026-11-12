@@ -11,11 +11,14 @@ import CheckoutPage from './pages/CheckoutPage/CheckoutPage.jsx'
 import LoginPage from './pages/LoginPage/LoginPage.jsx'
 import ProfilePage from './pages/ProfilePage/ProfilePage.jsx'
 import WalletPage from './pages/WalletPage/WalletPage.jsx'
+import OrdersPage from './pages/OrdersPage/OrdersPage.jsx'
+import OrderPayPage from './pages/OrdersPage/OrderPayPage.jsx'
 import AdminLayout from './pages/admin/AdminLayout.jsx'
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminUsers from './pages/admin/AdminUsers.jsx'
 import AdminUserDetail from './pages/admin/AdminUserDetail.jsx'
 import AdminDeposits from './pages/admin/AdminDeposits.jsx'
+import AdminRefunds from './pages/admin/AdminRefunds.jsx'
 import AdminTransactions from './pages/admin/AdminTransactions.jsx'
 import AdminOrders from './pages/admin/AdminOrders.jsx'
 import AdminOrderDetail from './pages/admin/AdminOrderDetail.jsx'
@@ -131,6 +134,12 @@ export default function App() {
             <Route path="/wallet" element={
               <ProtectedRoute><PublicLayout><WalletPage /></PublicLayout></ProtectedRoute>
             } />
+            <Route path="/orders" element={
+              <ProtectedRoute><PublicLayout><OrdersPage /></PublicLayout></ProtectedRoute>
+            } />
+            <Route path="/orders/:id/pay" element={
+              <ProtectedRoute><PublicLayout><OrderPayPage /></PublicLayout></ProtectedRoute>
+            } />
             <Route path="/support" element={
               <ProtectedRoute><PublicLayout><SupportPage /></PublicLayout></ProtectedRoute>
             } />
@@ -141,6 +150,7 @@ export default function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="users/:id" element={<AdminUserDetail />} />
               <Route path="deposits" element={<AdminDeposits />} />
+              <Route path="refunds" element={<AdminRefunds />} />
               <Route path="transactions" element={<AdminTransactions />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="orders/:id" element={<AdminOrderDetail />} />

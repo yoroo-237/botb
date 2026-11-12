@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
-import { useCart } from '../../context/CartContext.jsx'
+import { useCart, lineKey } from '../../context/CartContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { apiFetch } from '../../utils/api.js'
 import { formatPrice } from '../../data/products.js'
+import { fingerprint, encryptTo } from '../../utils/pgp.js'
 import styles from './CheckoutPage.module.css'
 
 const COIN_STYLE = {
@@ -49,14 +50,35 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false)
   const [confirmation, setConfirmation] = useState(null)
   const [shipping, setShipping] = useState({ cost: 0, freeThreshold: 0 })
+  // Paid from the wallet balance, or straight in crypto to the order's own address
+  const [method, setMethod] = useState('wallet')
+  const [coins, setCoins] = useState(null)
+  const [coin, setCoin] = useState('')
+  const [payWindow, setPayWindow] = useState(30)
+  // Optional: where the shop sends money back should the order be refunded
+  const [refund, setRefund] = useState({ currency: 'BTC', address: '' })
+  // The shop's PGP key: the address can then be encrypted on this device before it is sent
+  const [shopKey, setShopKey] = useState('')
+  const [encrypt, setEncrypt] = useState(true)
+  const [keyPrint, setKeyPrint] = useState(null)
+  useEffect(() => { if (shopKey && delivery) fingerprint(shopKey).then(setKeyPrint) }, [shopKey, delivery])
+  const encrypting = !!(shopKey && encrypt && keyPrint)
+  useEffect(() => {
+    apiFetch('/orders/payable-coins').then(d => { setCoins(d.coins || []); setPayWindow(d.payWindowMinutes || 30); setCoin(c => c || d.coins?.[0] || '') }).catch(() => setCoins([]))
+  }, [])
+  // Paid in crypto: a refund goes back in the coin paid, so the refund address is that coin's
+  useEffect(() => { if (method === 'crypto' && coin) setRefund(r => (r.currency === coin ? r : { currency: coin, address: '' })) }, [method, coin])
 
   // Same rule as the backend (order.service): free above the threshold, else the flat cost
   useEffect(() => {
     apiFetch('/content/settings')
-      .then(d => setShipping({
-        cost:          parseFloat(d.settings?.shipping_cost) || 0,
-        freeThreshold: parseFloat(d.settings?.shipping_free_threshold) || 0,
-      }))
+      .then(d => {
+        setShipping({
+          cost:          parseFloat(d.settings?.shipping_cost) || 0,
+          freeThreshold: parseFloat(d.settings?.shipping_free_threshold) || 0,
+        })
+        setShopKey(d.settings?.pgp_public_key?.trim() || '')
+      })
       .catch(() => {})
   }, [])
 
@@ -64,7 +86,12 @@ export default function CheckoutPage() {
   useEffect(() => { syncCart() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (user) apiFetch('/profile').then(p => setProfileHandle(p.telegramHandle || '')).catch(() => setProfileHandle(''))
+    if (user) apiFetch('/profile').then(p => {
+      setProfileHandle(p.telegramHandle || '')
+      // The refund address given last time (kept on the account for BTC and XMR)
+      if (p.btcRefundAddress) setRefund(r => r.address ? r : { currency: 'BTC', address: p.btcRefundAddress })
+      else if (p.xmrRefundAddress) setRefund(r => r.address ? r : { currency: 'XMR', address: p.xmrRefundAddress })
+    }).catch(() => setProfileHandle(''))
   }, [user])
 
   const deliveryFee = shipping.freeThreshold > 0 && subtotal >= shipping.freeThreshold ? 0 : shipping.cost
@@ -91,23 +118,41 @@ export default function CheckoutPage() {
       document.getElementById('delivery')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
-    if (available < total) {
-      setSubmitError(`Insufficient ${payCurrency ? payCurrency + ' ' : ''}balance. Please add funds to your wallet.`)
+    if (method === 'wallet' && available < total) {
+      setSubmitError(`Insufficient ${payCurrency ? payCurrency + ' ' : ''}balance. Please add funds to your wallet, or pay with crypto.`)
       return
     }
+    if (method === 'crypto' && !coin) return
 
     setLoading(true)
     setSubmitError('')
     try {
-      if (delivery) { try { localStorage.setItem('checkout_address', JSON.stringify(address)) } catch { /* storage blocked */ } }
+      // An encrypted address is not kept on the device either
+      if (delivery && !encrypting) { try { localStorage.setItem('checkout_address', JSON.stringify(address)) } catch { /* storage blocked */ } }
+      let shipTo = delivery ? { ...address, zip: address.zip.trim() } : null
+      if (shipTo && encrypting) {
+        const { name, street, apt, city, state, zip } = shipTo
+        shipTo = { pgp: await encryptTo(shopKey, [name, street, apt, `${city}, ${state} ${zip}`, 'United States'].filter(Boolean).join('\n')) }
+      }
+      const lines = items.map(item => ({ productId: item.id, quantity: item.quantity, ...(item.optionId ? { optionId: item.optionId } : {}) }))
+      const common = {
+        items: lines,
+        ...(!profileHandle && telegram.trim() ? { telegram: telegram.trim() } : {}),
+        ...(shipTo ? { delivery: shipTo } : {}),
+        ...(refund.address.trim() ? { refund: { currency: method === 'crypto' ? coin : refund.currency, address: refund.address.trim() } } : {}),
+      }
+      if (method === 'crypto') {
+        const data = await apiFetch('/orders/pay', { method: 'POST', body: JSON.stringify({ ...common, coin }) })
+        clearCart()
+        navigate(`/orders/${data.order.id}/pay`)
+        return
+      }
       const data = await apiFetch('/orders', {
         method: 'POST',
         body: JSON.stringify({
-          items: items.map(item => ({ productId: item.id, quantity: item.quantity })),
+          ...common,
           paymentMethod: payCurrency || 'wallet',
           ...(payCurrency ? { payCurrency } : {}),
-          ...(!profileHandle && telegram.trim() ? { telegram: telegram.trim() } : {}),
-          ...(delivery ? { delivery: { ...address, zip: address.zip.trim() } } : {}),
         }),
       })
       clearCart()
@@ -124,7 +169,7 @@ export default function CheckoutPage() {
 
   const payHolding = holdings.find(h => h.currency === payCurrency)
   const available = payHolding ? (payHolding.usd || 0) : balance
-  const balanceInsufficient = available < total
+  const balanceInsufficient = method === 'wallet' && available < total
 
   if (items.length === 0) {
     return (
@@ -201,12 +246,48 @@ export default function CheckoutPage() {
                       </div>
                       <Field label="ZIP code" name="a-zip" inputMode="numeric" autoComplete="shipping postal-code" placeholder="12345" maxLength={10} value={address.zip} onChange={setA('zip')} error={bad('zip') && '5-digit ZIP'} />
                     </div>
-                    <p className={styles.optionHint}>Shipped in discreet, unmarked packaging. Your address goes on the invoice the shop receives on Telegram.</p>
+                    {shopKey && keyPrint && (
+                      <label className={styles.optionHint} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', margin: '10px 0' }}>
+                        <input type="checkbox" checked={encrypt} onChange={e => setEncrypt(e.target.checked)} style={{ marginTop: 3 }} />
+                        <span><b>Encrypt my address with PGP.</b> Encrypted on this device with the shop’s key before it’s sent, so only the shop can read it. Key {keyPrint.split(' ').slice(-4).join(' ')}.</span>
+                      </label>
+                    )}
+                    <p className={styles.optionHint}>Shipped in discreet, unmarked packaging. {encrypting ? 'Your address is encrypted: the shop receives it as a PGP message.' : 'Your address goes on the invoice the shop receives on Telegram.'}</p>
                   </div>
                 )}
               </div>
 
-              <h2 className={styles.sectionTitle} style={{ marginTop: 'var(--spacing-30)' }}>Pay with</h2>
+              <h2 className={styles.sectionTitle} style={{ marginTop: 'var(--spacing-30)' }}>Payment</h2>
+              <div className={styles.paymentMethods} role="radiogroup" aria-label="Payment method" style={{ marginBottom: 12 }}>
+                <label className={styles.paymentOption + ' ' + styles.deliveryOption + (method === 'wallet' ? ' ' + styles.paymentSelected : '')}>
+                  <input type="radio" name="method" checked={method === 'wallet'} onChange={() => setMethod('wallet')} className={styles.radioHidden} />
+                  <span className={styles.paymentLabel}>Wallet balance<small className={styles.optionHint}>Paid instantly from your credits</small></span>
+                  <span className={styles.optionAmount}>${balance.toFixed(2)}</span>
+                </label>
+                <label className={styles.paymentOption + ' ' + styles.deliveryOption + (method === 'crypto' ? ' ' + styles.paymentSelected : '')} style={coins && !coins.length ? { opacity: .55 } : undefined}>
+                  <input type="radio" name="method" checked={method === 'crypto'} disabled={coins && !coins.length} onChange={() => setMethod('crypto')} className={styles.radioHidden} />
+                  <span className={styles.paymentLabel}>Pay with crypto<small className={styles.optionHint}>{coins && !coins.length ? 'Unavailable right now' : `Send it from any wallet, ${payWindow} minutes to pay`}</small></span>
+                </label>
+              </div>
+              {method === 'crypto' ? (
+                <>
+                  <div className={styles.paymentMethods}>
+                    {(coins || []).map(c => {
+                      const style = COIN_STYLE[c] || { color: '#555', symbol: c[0] }
+                      return (
+                        <label key={c} className={styles.paymentOption + (coin === c ? ' ' + styles.paymentSelected : '')}>
+                          <input type="radio" name="coin" checked={coin === c} onChange={() => setCoin(c)} className={styles.radioHidden} />
+                          <span className={styles.cryptoBadge} style={{ background: style.color }}>{style.symbol}</span>
+                          <span className={styles.paymentLabel}>{c}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p style={{ fontSize: '0.8rem', opacity: .7, marginTop: 8 }}>
+                    Next you get this order’s own {coin || 'crypto'} address and the exact amount to send, priced now. Pay within {payWindow} minutes, or the order is cancelled and anything received is refunded.{coin === 'XMR' ? ' Monero payments are checked by hand.' : ''}
+                  </p>
+                </>
+              ) : (<>
               <div className={styles.paymentMethods}>
                 {[{ currency: '', label: 'Auto' }, ...holdings].map(h => {
                   const style = COIN_STYLE[h.currency] || { color: '#555', symbol: '$' }
@@ -237,7 +318,22 @@ export default function CheckoutPage() {
                 {payHolding?.price
                   ? `≈ ${+(total / payHolding.price).toFixed(8)} ${payCurrency} at the current price. `
                   : ''}
-                The total is converted at the live price when you place the order — that amount of crypto is locked in.
+                The total is converted at the live price when you place the order, and that amount of crypto is locked in.
+              </p>
+              </>)}
+
+              <h2 className={styles.sectionTitle} style={{ marginTop: 'var(--spacing-30)' }}>Refund address <span style={{ fontWeight: 400, opacity: .6, fontSize: '0.8em' }}>(optional)</span></h2>
+              <div className={styles.fieldRow}>
+                <div className={styles.fieldGroup}>
+                  <label className={styles.label} htmlFor="rf-coin">Coin</label>
+                  <select id="rf-coin" className={styles.select} value={method === 'crypto' ? coin : refund.currency} disabled={method === 'crypto'} onChange={e => setRefund(r => ({ ...r, currency: e.target.value }))}>
+                    {['BTC', 'LTC', 'ETH', 'DOGE', 'XMR'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <Field label={`Your ${method === 'crypto' ? coin : refund.currency} address`} name="rf-addr" autoComplete="off" placeholder="Leave empty if you prefer" value={refund.address} onChange={e => setRefund(r => ({ ...r, address: e.target.value }))} />
+              </div>
+              <p className={styles.optionHint}>
+                {method === 'crypto' ? 'Where we send the coin back if a payment arrives late, short or too large, or if the order is refunded.' : 'Only used should your order be refunded. It goes on your order.'}
               </p>
             </div>
 
@@ -250,7 +346,7 @@ export default function CheckoutPage() {
               </div>
 
               {items.map(item => (
-                <div key={item.id} className={styles.orderItem}>
+                <div key={lineKey(item)} className={styles.orderItem}>
                   <span className={styles.orderItemName}>{item.name} <strong>× {item.quantity}</strong></span>
                   <span>{formatPrice(item.price * item.quantity)}</span>
                 </div>
@@ -285,7 +381,7 @@ export default function CheckoutPage() {
                 className={'wp-element-button ' + styles.placeOrderBtn}
                 disabled={loading || items.length === 0}
               >
-                {loading ? 'Placing Order…' : 'Place Order'}
+                {loading ? 'Placing Order…' : method === 'crypto' ? `Continue to payment · ${formatPrice(total)}` : 'Place Order'}
               </button>
               {touched && !addressOk && (
                 <p style={{ fontSize: 'var(--font-size-small)', color: '#cf2e2e', textAlign: 'center', marginTop: 8 }}>Please complete your delivery address.</p>

@@ -39,6 +39,7 @@ export default function ProductDetailPage() {
   const [activeImg, setActiveImg] = useState(0)
   const [qty, setQty]     = useState(1)
   const [added, setAdded] = useState(false)
+  const [optionId, setOptionId] = useState(null) // the variant chosen, when the product has some
 
   // API product state
   const [apiProduct, setApiProduct] = useState(null)
@@ -72,6 +73,8 @@ export default function ProductDetailPage() {
         category:    apiProduct.category?.slug || '',
         categoryName: apiProduct.category?.name || '',
         media:       normalizeMedia(apiProduct.images || []),
+        // Variants (flavor, strain, size): each its own price and stock
+        options:     (apiProduct.options || []).map(o => ({ id: o.id, label: o.label, price: Number(o.price), stock: o.stock })),
         fromApi:     true,
       }
     }
@@ -142,15 +145,20 @@ export default function ProductDetailPage() {
 
   if (!product) return null
 
+  const options = product.options || []
+  const option  = options.find(o => o.id === optionId) || options.find(o => o.stock > 0) || options[0] || null
+  const price   = option ? option.price : product.price
+  const soldOut = option ? option.stock <= 0 : false
   const activeMedia = product.media[activeImg] || product.media[0]
   const isVideo     = activeMedia?.mediaType === 'video'
 
   function handleAddToCart() {
     const cartProduct = {
       id:     product.id,
-      name:   product.name,
+      name:   option ? `${product.name} (${option.label})` : product.name,
       slug:   product.slug,
-      price:  product.price,
+      price,
+      ...(option ? { optionId: option.id, optionLabel: option.label } : {}),
       images: product.media.map(m => ({ src: m.url, thumbnail: m.thumbnail, mediaType: m.mediaType })),
     }
     addItem(cartProduct, qty)
@@ -241,7 +249,18 @@ export default function ProductDetailPage() {
           {/* Summary */}
           <div className={styles.summary}>
             <h1 className={styles.productTitle}>{product.name}</h1>
-            <p className={styles.price}>{formatPrice(product.price)}</p>
+            <p className={styles.price}>{formatPrice(price)}</p>
+
+            {options.length > 0 && (
+              <div style={{ margin: '12px 0 18px' }}>
+                <label htmlFor="pd-option" style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 6 }}>Choose an option</label>
+                <select id="pd-option" value={option?.id ?? ''} onChange={e => { setOptionId(Number(e.target.value)); setQty(1) }}
+                  style={{ width: '100%', maxWidth: 360, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-accent-6)', background: 'transparent', color: 'inherit', font: 'inherit' }}>
+                  {options.map(o => <option key={o.id} value={o.id}>{o.label} · {formatPrice(o.price)}{o.stock > 0 ? '' : ' · sold out'}</option>)}
+                </select>
+                {option && option.stock > 0 && option.stock <= 10 && <div style={{ fontSize: 13, color: '#b45309', marginTop: 6 }}>Only {option.stock} left</div>}
+              </div>
+            )}
 
             {product.description && !product.description.startsWith('https://t.me') && (
               <div className={styles.description} style={{ color: '#555', fontSize: '15px', lineHeight: 1.6 }}>
@@ -266,7 +285,7 @@ export default function ProductDetailPage() {
                   aria-label="Quantity"
                 />
                 <button
-                  onClick={() => setQty(q => q + 1)}
+                  onClick={() => setQty(q => (option ? Math.min(option.stock || 1, q + 1) : q + 1))}
                   className={styles.qtyBtn}
                   aria-label="Increase quantity"
                 >＋</button>
@@ -277,10 +296,10 @@ export default function ProductDetailPage() {
               <button
                 onClick={handleAddToCart}
                 className={'wp-element-button ' + styles.addBtn}
-                disabled={!product.fromApi}
+                disabled={!product.fromApi || soldOut}
                 title={product.fromApi ? undefined : 'This product is not available right now'}
               >
-                {!product.fromApi ? (apiLoading ? 'Loading…' : 'Unavailable') : added ? 'Added!' : 'Add to cart'}
+                {!product.fromApi ? (apiLoading ? 'Loading…' : 'Unavailable') : soldOut ? 'Sold out' : added ? 'Added!' : 'Add to cart'}
               </button>
             </div>
 

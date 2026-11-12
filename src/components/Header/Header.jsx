@@ -169,6 +169,7 @@ export default function Header() {
               </button>
               <ul className={styles.userDropdown + (userMenuOpen ? ' ' + styles.submenuOpen : '')}>
                 <li><Link to="/profile" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>My Profile</Link></li>
+                <li><Link to="/orders" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>My Orders</Link></li>
                 <li><Link to="/wallet" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Wallet · ${balance.toFixed(2)}</Link></li>
                 <li><Link to="/support" className={styles.submenuLink} onClick={() => setUserMenuOpen(false)}>Support</Link></li>
                 {isStaff(user) && (
@@ -246,6 +247,7 @@ export default function Header() {
                   {user ? (
                     <>
                       <Link to="/profile" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>My Profile</Link>
+                      <Link to="/orders" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>My Orders</Link>
                       <Link to="/wallet" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Wallet · ${balance.toFixed(2)}</Link>
                       <Link to="/support" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}>Support</Link>
                       {isStaff(user) && (

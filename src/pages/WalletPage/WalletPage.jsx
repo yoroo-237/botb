@@ -23,7 +23,7 @@ const DEPOSIT_STATUS_MAP = {
 
 const TERMS = [
   'All cryptocurrency deposits are final and non-refundable once confirmed on the blockchain.',
-  'Deposit addresses are single-use. Do not reuse addresses from previous transactions.',
+  'You can send to a deposit address again later: each payment is credited after 1 confirmation (Monero: by hand).',
   'Minimum deposit amount may apply. Deposits below the minimum will not be credited.',
   'Processing times vary by cryptocurrency and network congestion.',
   'Bitcoin, Litecoin, Dogecoin, and Ethereum deposits are credited automatically after sufficient blockchain confirmations, minus the deposit fee shown below.',
@@ -176,8 +176,8 @@ function AddFundsModal({ onClose, onSuccess, feePct }) {
 
             {feePct != null && (
               <div className={styles.feeBox}>
-                <strong>Deposit fee: {feePct/10}%</strong>
-                <span>Example: send 1 {currency} → {+(1 - feePct / 1000).toFixed(4)} {currency} is added to your balance.</span>
+                <strong>Deposit fee: {feePct}%</strong>
+                <span>Example: send 1 {currency} → {+(1 - feePct / 100).toFixed(4)} {currency} is added to your balance.</span>
               </div>
             )}
 
@@ -218,7 +218,7 @@ function AddFundsModal({ onClose, onSuccess, feePct }) {
                 <>
                   <span className={styles.autoBadge}> Auto-confirmed</span>
                   <p style={{ margin: 0 }}>
-                    Your deposit is detected on the blockchain automatically. Once confirmed, the {currency} you sent{feePct ? ` minus the ${feePct/10}% deposit fee` : ''} is added to your balance, valued at the live {currency}/USD price.
+                    Your deposit is detected on the blockchain automatically. Once confirmed, the {currency} you sent{feePct ? ` minus the ${feePct}% deposit fee` : ''} is added to your balance, valued at the live {currency}/USD price.
                   </p>
                 </>
               )}
@@ -289,6 +289,19 @@ export default function WalletPage() {
   const [detailsDeposit, setDetailsDeposit] = useState(null)
   const [tier, setTier] = useState(null)
   const pollRef = useRef(null)
+  // Check: reads an address again and credits a payment not counted yet (sent again, or late)
+  const [rechecking, setRechecking] = useState(null)
+  const [checkNote, setCheckNote] = useState('')
+  async function recheck(d) {
+    setRechecking(d.id); setCheckNote('')
+    try {
+      const r = await apiFetch(`/wallet/deposits/${d.id}/check`, { method: 'POST' })
+      const n = r.blockchainResult?.credited || 0
+      setCheckNote(n > 0 ? `Deposit #${d.id}: ${n} new payment${n > 1 ? 's' : ''} credited.` : r.blockchainResult?.pending ? `Deposit #${d.id}: a payment is waiting for its confirmation.` : `Deposit #${d.id}: no new payment on this address.`)
+      await fetchDeposits(); await loadUserData()
+    } catch (e) { setCheckNote(e.message) }
+    finally { setRechecking(null) }
+  }
 
   // Tier is computed server-side from total spent
   useEffect(() => {
@@ -414,6 +427,9 @@ export default function WalletPage() {
 
         {tab === 'deposits' && (
           <div className={styles.tableWrap}>
+            {checkNote && (
+              <div style={{ padding: '8px 16px', background: '#f0f4ff', borderRadius: '6px', marginBottom: '8px', fontSize: '0.82rem', color: '#3b5bdb' }}>{checkNote}</div>
+            )}
             {checking && (
               <div style={{ padding: '8px 16px', background: '#f0f4ff', borderRadius: '6px', marginBottom: '8px', fontSize: '0.82rem', color: '#3b5bdb' }}>
                 Checking blockchain for new confirmations…
@@ -428,6 +444,7 @@ export default function WalletPage() {
                     <th>ID</th>
                     <th>Status</th>
                     <th>Currency</th>
+                    <th>Received</th>
                     <th>Address</th>
                     <th>Created</th>
                     <th>Details</th>
@@ -435,7 +452,7 @@ export default function WalletPage() {
                 </thead>
                 <tbody>
                   {deposits.length === 0 ? (
-                    <tr><td colSpan={6} className={styles.empty}>No deposits found.</td></tr>
+                    <tr><td colSpan={7} className={styles.empty}>No deposits found.</td></tr>
                   ) : deposits.map(d => (
                     <tr key={d.id}>
                       <td><code className={styles.code}>#{d.id}</code></td>
@@ -445,6 +462,7 @@ export default function WalletPage() {
                         </span>
                       </td>
                       <td><strong>{d.currency}</strong></td>
+                      <td>{Number(d.amountReceived) > 0 ? `${Number(d.amountReceived)} ${d.currency}` : '—'}</td>
                       <td>
                         <span className={styles.code} title={d.address}>
                           {!d.address || d.address === 'pending' ? '—' : `${d.address.slice(0, 16)}…`}
@@ -452,12 +470,21 @@ export default function WalletPage() {
                       </td>
                       <td>{formatDate(d.createdAt)}</td>
                       <td>
-                        <button
-                          className={styles.detailsBtn}
-                          onClick={() => setDetailsDeposit(d)}
-                        >
-                          Details
-                        </button>
+                        {d.orderId && ['awaiting', 'partial'].includes(d.status) ? (
+                          <Link to={`/orders/${d.orderId}/pay`} className={styles.detailsBtn}>Pay order</Link>
+                        ) : (
+                          <button
+                            className={styles.detailsBtn}
+                            onClick={() => setDetailsDeposit(d)}
+                          >
+                            Details
+                          </button>
+                        )}
+                        {!['awaiting', 'partial'].includes(d.status) && d.currency !== 'XMR' && d.address && d.address !== 'pending' && (
+                          <button className={styles.detailsBtn} style={{ marginLeft: 6 }} disabled={rechecking === d.id} onClick={() => recheck(d)}>
+                            {rechecking === d.id ? 'Checking…' : 'Check'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

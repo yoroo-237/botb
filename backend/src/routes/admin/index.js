@@ -12,6 +12,7 @@ import analyticsRoutes    from './analytics.routes.js';
 import settingsRoutes     from './settings.routes.js';
 import contentRoutes      from './content.routes.js';
 import sweepRoutes        from './sweep.routes.js';
+import refundsRoutes      from './refunds.routes.js';
 
 const r = Router();
 
@@ -27,6 +28,7 @@ r.use('/transactions', transactionsRoutes);
 r.use('/support',      supportRoutes);
 r.use('/analytics',    analyticsRoutes);
 r.use('/settings',     settingsRoutes);
+r.use('/refunds',      refundsRoutes);
 r.use('/',             sweepRoutes);
 r.use('/',             contentRoutes);
 

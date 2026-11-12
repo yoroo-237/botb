@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useCart } from '../../context/CartContext.jsx'
+import { useCart, lineKey } from '../../context/CartContext.jsx'
 import { getThumb, formatPrice } from '../../data/products.js'
 import styles from './CartPage.module.css'
 
@@ -46,11 +46,11 @@ export default function CartPage() {
               </thead>
               <tbody>
                 {items.map(item => (
-                  <tr key={item.id} className={styles.row}>
+                  <tr key={lineKey(item)} className={styles.row}>
                     {/* Remove button */}
                     <td className={styles.removeTd}>
                       <button
-                        onClick={() => removeItem(item.id)}
+                        onClick={() => removeItem(lineKey(item))}
                         className={styles.removeBtn}
                         aria-label={`Remove ${item.name}`}
                       >×</button>
@@ -85,7 +85,7 @@ export default function CartPage() {
                     <td className={styles.qtyTd}>
                       <div className={styles.qtySelector}>
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(lineKey(item), item.quantity - 1)}
                           disabled={item.quantity <= 1}
                           className={styles.qtyBtn}
                           aria-label={`Reduce quantity of ${item.name}`}
@@ -95,11 +95,11 @@ export default function CartPage() {
                           className={styles.qtyInput}
                           value={item.quantity}
                           min={1}
-                          onChange={e => updateQuantity(item.id, Math.max(1, parseInt(e.target.value) || 1))}
+                          onChange={e => updateQuantity(lineKey(item), Math.max(1, parseInt(e.target.value) || 1))}
                           aria-label={`Quantity of ${item.name}`}
                         />
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(lineKey(item), item.quantity + 1)}
                           className={styles.qtyBtn}
                           aria-label={`Increase quantity of ${item.name}`}
                         >＋</button>

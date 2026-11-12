@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useCart } from '../../context/CartContext.jsx'
+import { useCart, lineKey } from '../../context/CartContext.jsx'
 import { getThumb, formatPrice } from '../../data/products.js'
 import styles from './MiniCart.module.css'
 
@@ -65,7 +65,7 @@ export default function MiniCart({ isOpen, onClose }) {
                 </thead>
                 <tbody>
                   {items.map(item => (
-                    <tr key={item.id} className={styles.row}>
+                    <tr key={lineKey(item)} className={styles.row}>
                       <td className={styles.imgCell} aria-hidden="true">
                         <Link to={`/product/${item.slug}`} tabIndex="-1" onClick={onClose}>
                           <img
@@ -84,7 +84,7 @@ export default function MiniCart({ isOpen, onClose }) {
                         <div className={styles.itemPrice}>{formatPrice(item.price)}</div>
                         <div className={styles.qty}>
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => updateQuantity(lineKey(item), item.quantity - 1)}
                             disabled={item.quantity <= 1}
                             className={styles.qtyBtn}
                             aria-label={"Reduce quantity of " + item.name}
@@ -94,16 +94,16 @@ export default function MiniCart({ isOpen, onClose }) {
                             className={styles.qtyInput}
                             value={item.quantity}
                             min={1}
-                            onChange={e => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                            onChange={e => updateQuantity(lineKey(item), parseInt(e.target.value) || 1)}
                             aria-label={"Quantity of " + item.name}
                           />
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => updateQuantity(lineKey(item), item.quantity + 1)}
                             className={styles.qtyBtn}
                             aria-label={"Increase quantity of " + item.name}
                           >＋</button>
                           <button
-                            onClick={() => removeItem(item.id)}
+                            onClick={() => removeItem(lineKey(item))}
                             className={styles.removeBtn}
                             aria-label={"Remove " + item.name + " from cart"}
                           >

@@ -2,6 +2,7 @@ import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { parsePaginationParams, buildPagination } from '../../utils/pagination.js';
 import { appError } from '../../utils/formatters.js';
+import { orderService } from '../../services/order.service.js';
 
 const VALID_STATUSES = ['processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
 
@@ -49,8 +50,16 @@ export const adminOrdersController = {
     if (!VALID_STATUSES.includes(status)) {
       throw appError(`Invalid status. Valid values: ${VALID_STATUSES.join(', ')}`, 400);
     }
+    const id = parseInt(req.params.id, 10);
+    const current = await prisma.order.findUniqueOrThrow({ where: { id }, select: { status: true } });
+    // Not paid yet: it can only be cancelled (stock released, anything received refunded)
+    if (current.status === 'awaiting_payment') {
+      if (status !== 'cancelled') throw appError('This order is still waiting for its crypto payment: it can only be cancelled.', 409);
+      await orderService.cancelPendingOrder(id, 'admin');
+      return res.json(ok(await prisma.order.findUnique({ where: { id } })));
+    }
     const order = await prisma.order.update({
-      where: { id: parseInt(req.params.id, 10) },
+      where: { id },
       data:  { status },
     });
     res.json(ok(order));

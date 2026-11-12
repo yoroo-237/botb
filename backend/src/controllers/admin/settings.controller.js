@@ -1,11 +1,14 @@
 import { prisma } from '../../db.js';
 import { ok } from '../../utils/response.js';
 import { appError } from '../../utils/formatters.js';
+import { readPublicKey } from '../../services/pgp.service.js';
 
 const ALLOWED_KEYS = new Set([
   'site_name', 'maintenance_mode', 'registration_open',
   'shipping_cost', 'shipping_free_threshold', 'shipping_deadline_h', 'shipping_deadline_m',
-  'points_rate', 'deposit_expiry_hours', 'min_deposit', 'max_deposit',
+  'points_rate', 'deposit_expiry_hours',
+  // Customers can encrypt their delivery address to it (public key only)
+  'pgp_public_key',
   'btc_address', 'ltc_address', 'doge_address', 'eth_address', 'xmr_address',
   'btc_hd_seed',
 ]);
@@ -27,6 +30,8 @@ export const adminSettingsController = {
   async update(req, res) {
     const entries = Object.entries(req.body).filter(([k]) => ALLOWED_KEYS.has(k));
     if (entries.length === 0) throw appError('No valid keys to update', 400);
+    // A public key only, checked (a private key is refused, never stored)
+    for (const e of entries) if (e[0] === 'pgp_public_key') e[1] = (await readPublicKey(e[1])).armored;
 
     await Promise.all(entries.map(([key, value]) =>
       prisma.siteSetting.upsert({

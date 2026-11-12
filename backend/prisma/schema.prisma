@@ -49,6 +49,7 @@ model User {
   reviews        Review[]
   sweepLogs      SweepLog[]
   holdings       WalletHolding[]
+  refundRequests RefundRequest[]
 }
 
 // Crypto quantity a customer holds per currency, net of the deposit commission.
@@ -99,10 +100,25 @@ model Product {
   brandId     Int?
   brand       Brand?         @relation(fields: [brandId], references: [id])
   images      ProductImage[]
+  options     ProductOption[]
   orderItems  OrderItem[]
   reviews     Review[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+}
+
+// A product sold by variant (flavor, strain, size): each variant has its own price and stock.
+// The product's own price is the lowest of its variants, its stock their total.
+model ProductOption {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String
+  price     Decimal @db.Decimal(10, 2)
+  stock     Int     @default(0)
+  position  Int     @default(0)
+
+  @@index([productId])
 }
 
 model ProductImage {
@@ -122,7 +138,7 @@ model Order {
   orderNumber     String      @unique
   userId          Int
   user            User        @relation(fields: [userId], references: [id])
-  status          String      @default("processing")  // processing | shipped | delivered | cancelled | refunded
+  status          String      @default("processing")  // awaiting_payment | processing | shipped | delivered | cancelled | refunded
   paymentMethod   String
   totalAmount     Decimal     @db.Decimal(10, 2)
   shippingFee     Decimal     @default(0) @db.Decimal(10, 2)
@@ -134,6 +150,8 @@ model Order {
   note            String?
   // Crypto debited at checkout, frozen: [{ currency, amount, rate, usd }]
   payments        Json        @default("[]")
+  // Paid straight in crypto: the deadline of an order "awaiting_payment"
+  expiresAt       DateTime?
   placedAt        DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
@@ -146,6 +164,8 @@ model OrderItem {
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId Int?
   product   Product? @relation(fields: [productId], references: [id])
+  // The variant bought, if the product has variants (its stock is given back on cancel)
+  optionId  Int?
   name      String
   price     Decimal  @db.Decimal(10, 2)
   quantity  Int
@@ -172,6 +192,14 @@ model Deposit {
   shopSweepTx      String?
   reserveSweptAt   DateTime?
   reserveSweepTx   String?
+  // How much of netAmount / commissionAmount already left the address: a customer can pay
+  // the same address again after a sweep, and only the new share is swept then
+  shopSweptAmount    Decimal   @default(0) @db.Decimal(18, 8)
+  reserveSweptAmount Decimal   @default(0) @db.Decimal(18, 8)
+  // The order this deposit pays directly (no wallet top-up); its payments add up
+  orderId         Int?         @unique
+  // Transactions already counted (each payment is credited once, by its hash)
+  txSeen          Json         @default("[]")
   expiresAt       DateTime
   confirmedAt     DateTime?
   hookId          String?
@@ -335,4 +363,27 @@ model ApiKey {
 model SiteSetting {
   key   String @id
   value String
+}
+
+// Refunds an admin approves for orders paid straight in crypto: a payment after the 30
+// minutes, a short payment on an order that expired, a surplus. The amount leaves the
+// customer's holding when the request is made; keeping it in the wallet gives it back.
+model RefundRequest {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  orderId   Int?
+  depositId Int
+  currency  String
+  amount    Decimal   @db.Decimal(18, 8)
+  address   String?
+  reason    String
+  status    String    @default("pending") // pending | sending | manual | refunded | rejected
+  txHash    String?
+  error     String?
+  createdAt DateTime  @default(now())
+  decidedAt DateTime?
+
+  @@index([status])
+  @@index([depositId])
 }

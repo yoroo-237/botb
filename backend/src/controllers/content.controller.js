@@ -9,6 +9,8 @@ const PUBLIC_KEYS = [
   'shipping_free_threshold',
   'shipping_deadline_h',
   'shipping_deadline_m',
+  // Customers encrypt their delivery address to it in the browser
+  'pgp_public_key',
 ];
 
 export const contentController = {

@@ -3,6 +3,7 @@ import { adminFetch } from './utils/api.js'
 import { useApp } from '../../context/AppContext.jsx'
 import { isAdmin } from '../../utils/roles.js'
 import { PendingTiles, SweepResult, SweepLogTable } from '../../components/admin/SweepParts.jsx'
+import PgpKeyField from '../../components/admin/PgpKeyField.jsx'
 
 const TABS = ['General', 'Shipping', 'Loyalty', 'Deposits', 'Crypto']
 
@@ -52,6 +53,7 @@ export default function AdminSettings() {
   const [sweepConfirm, setSweepConfirm] = useState(null)  // currency awaiting confirmation
   const [sweeping, setSweeping] = useState(null)          // currency being swept
   const [sweepResult, setSweepResult] = useState(null)
+  const [sweepUsd, setSweepUsd] = useState('')            // amount to sweep in USD, '' = everything owed
 
   const loadSweepInfo = useCallback(() => {
     if (!canEdit) return
@@ -99,7 +101,8 @@ export default function AdminSettings() {
     setSweepResult(null)
     try {
       const url = currency === 'ETH' ? '/admin/eth/sweep' : `/admin/utxo/sweep/${currency}`
-      setSweepResult(await adminFetch(url, { method: 'POST' }))
+      setSweepResult(await adminFetch(url, { method: 'POST', body: JSON.stringify(sweepUsd ? { usd: Number(sweepUsd) } : {}) }))
+      setSweepUsd('')
       loadSweepInfo()
     } catch (e) {
       setSweepResult({ currency, error: e.message })
@@ -195,6 +198,11 @@ export default function AdminSettings() {
                   <input className="admin-input" type="number" min="0" max="59" value={settings.shipping_deadline_m ?? ''} onChange={e => setS('shipping_deadline_m', e.target.value)} />
                 </div>
               </div>
+
+              <h2 className="admin-card-title" style={{ marginTop: 24 }}>PGP key for delivery addresses</h2>
+              <PgpKeyField value={settings.pgp_public_key || ''} onChange={v => setS('pgp_public_key', v)} name={settings.site_name || 'Shop'} fileName="botb"
+                onGenerated={async key => { await adminFetch('/admin/settings', { method: 'PUT', body: JSON.stringify({ pgp_public_key: key }) }); setSaved(s => ({ ...s, pgp_public_key: key })); setSuccess('New key saved. Its private key was downloaded: keep the file and the passphrase safe.') }}
+                help="With a key, customers can encrypt their delivery address on their device before it is sent: the order then holds a PGP message only you can read (Orders, an order, Decrypt)." />
             </>
           )}
 
@@ -232,14 +240,6 @@ export default function AdminSettings() {
               <div className="admin-form-group">
                 <label className="admin-label">Deposit Expiry (Hours)</label>
                 <input className="admin-input" type="number" min="1" value={settings.deposit_expiry_hours ?? ''} onChange={e => setS('deposit_expiry_hours', e.target.value)} />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-label">Minimum Deposit ($)</label>
-                <input className="admin-input" type="number" min="0" step="0.01" value={settings.min_deposit ?? ''} onChange={e => setS('min_deposit', e.target.value)} />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-label">Maximum Deposit ($)</label>
-                <input className="admin-input" type="number" min="0" step="0.01" value={settings.max_deposit ?? ''} onChange={e => setS('max_deposit', e.target.value)} />
               </div>
             </>
           )}
@@ -324,8 +324,10 @@ export default function AdminSettings() {
                   {sweepConfirm === id ? (
                     <>
                       <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 600, flex: 1, minWidth: 0 }}>
-                        Sweep {id} → <span className="admin-code">{saved[`${id.toLowerCase()}_address`]}</span> ?
+                        Sweep {sweepUsd ? `$${sweepUsd} of ${id}` : `all ${id}`} → <span className="admin-code">{saved[`${id.toLowerCase()}_address`]}</span> ?
                       </span>
+                      <input className="admin-input" type="number" min="0.01" step="0.01" placeholder="USD, empty = all"
+                        value={sweepUsd} onChange={e => setSweepUsd(e.target.value)} style={{ width: 140, padding: '4px 8px' }} aria-label="Amount to sweep in USD" />
                       <div className="admin-gap-actions">
                         <button type="button" className="admin-btn admin-btn-success admin-btn-sm" onClick={() => doSweep(id)}>Yes, sweep</button>
                         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setSweepConfirm(null)}>Cancel</button>

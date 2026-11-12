@@ -12,7 +12,7 @@ r.get('/:id', async (req, res) => {
   const { ok }     = await import('../../utils/response.js');
   const product    = await prisma.product.findUniqueOrThrow({
     where:   { id: parseInt(req.params.id, 10) },
-    include: { images: { orderBy: { position: 'asc' } }, category: true, brand: true },
+    include: { images: { orderBy: { position: 'asc' } }, category: true, brand: true, options: { orderBy: { position: 'asc' } } },
   });
   res.json(ok(product));
 });

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { section: 'Users & Finance' },
   { label: 'Users', path: '/duc-dashboard/users' },
   { label: 'Deposits', path: '/duc-dashboard/deposits' },
+  { label: 'Refunds', path: '/duc-dashboard/refunds' },
   { label: 'Transactions', path: '/duc-dashboard/transactions' },
   { section: 'Support' },
   { label: 'Support Tickets', path: '/duc-dashboard/support' },

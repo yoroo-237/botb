@@ -33,7 +33,7 @@ export const productService = {
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where, skip, take: limit, orderBy,
-        include: { images: { orderBy: { position: 'asc' } }, category: true },
+        include: { images: { orderBy: { position: 'asc' } }, category: true, options: { orderBy: { position: 'asc' } } },
       }),
       prisma.product.count({ where }),
     ]);
@@ -46,6 +46,7 @@ export const productService = {
       where:   { slug, isActive: true },
       include: {
         images:   { orderBy: { position: 'asc' } },
+        options:  { orderBy: { position: 'asc' } },
         category: { include: { parent: true } },
         brand:    true,
       },

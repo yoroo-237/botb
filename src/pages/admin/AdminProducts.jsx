@@ -287,6 +287,11 @@ function ProductModal({ product, onClose, onSaved, categories }) {
     isActive:    true,
   })
   const [images, setImages]   = useState([])
+  // Variants (flavor, strain, size): label, price, stock. With variants, the product's price
+  // is the lowest one and its stock their total (set by the server).
+  const [options, setOptions] = useState([])
+  const setOpt = (i, k, v) => setOptions(list => list.map((o, j) => (j === i ? { ...o, [k]: v } : o)))
+  const hasOptions = options.length > 0
   const [tab, setTab]         = useState('info')
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(isEdit)
@@ -311,6 +316,7 @@ function ProductModal({ product, onClose, onSaved, categories }) {
           isActive:    data.isActive    ?? true,
         })
         setImages(data.images || [])
+        setOptions((data.options || []).map(o => ({ id: o.id, label: o.label, price: String(o.price), stock: String(o.stock) })))
       })
       .catch(() => {
         // fallback to list data
@@ -351,8 +357,8 @@ function ProductModal({ product, onClose, onSaved, categories }) {
       const body = {
         name:        form.name,
         slug:        form.slug,
-        price:       parseFloat(form.price),
-        stock:       parseInt(form.stock, 10),
+        ...(hasOptions ? {} : { price: parseFloat(form.price), stock: parseInt(form.stock, 10) }),
+        options:     options.map(o => ({ id: o.id, label: o.label, price: parseFloat(o.price), stock: parseInt(o.stock || 0, 10) || 0 })),
         description: form.description || null,
         categoryId:  form.categoryId  || null,
         isActive:    form.isActive,
@@ -449,7 +455,7 @@ function ProductModal({ product, onClose, onSaved, categories }) {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {!hasOptions && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="admin-form-group">
                   <label className="admin-label">Price ($) *</label>
                   <input
@@ -474,6 +480,23 @@ function ProductModal({ product, onClose, onSaved, categories }) {
                     placeholder="0"
                   />
                 </div>
+              </div>}
+
+              <div className="admin-form-group">
+                <label className="admin-label">Variants <span style={{ fontWeight: 400, color: '#888' }}>(flavor, strain, size: optional)</span></label>
+                {options.map((o, i) => (
+                  <div key={o.id || `n${i}`} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 34px', gap: '8px', marginBottom: '6px' }}>
+                    <input className="admin-input" placeholder="Label (e.g. Berry Nova)" value={o.label} onChange={e => setOpt(i, 'label', e.target.value)} required />
+                    <input className="admin-input" type="number" step="0.01" min="0" placeholder="Price" value={o.price} onChange={e => setOpt(i, 'price', e.target.value)} required />
+                    <input className="admin-input" type="number" min="0" placeholder="Stock" value={o.stock} onChange={e => setOpt(i, 'stock', e.target.value)} />
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" aria-label="Remove variant" onClick={() => setOptions(list => list.filter((_, j) => j !== i))}>×</button>
+                  </div>
+                ))}
+                <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm"
+                  onClick={() => setOptions(list => [...list, { id: null, label: '', price: list[list.length - 1]?.price || form.price || '', stock: '0' }])}>
+                  + Add a variant
+                </button>
+                {hasOptions && <p style={{ fontSize: '12px', color: '#888', margin: '6px 0 0' }}>The product price shown is the lowest variant price, its stock the total of the variants.</p>}
               </div>
 
               <div className="admin-form-group">
